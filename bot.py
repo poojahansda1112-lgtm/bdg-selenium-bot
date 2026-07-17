@@ -2,11 +2,8 @@ import telebot
 import os
 import sqlite3
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+import requests
+from bs4 import BeautifulSoup
 import time
 
 TOKEN = os.getenv('BOT_TOKEN')
@@ -19,23 +16,20 @@ c.execute('''CREATE TABLE IF NOT EXISTS results
              (id INTEGER PRIMARY KEY, slot TEXT, color TEXT, number TEXT, size TEXT, timestamp DATETIME)''')
 conn.commit()
 
-# ---------- Selenium Scraping Function ----------
+# ---------- BeautifulSoup Scraping ----------
 def scrape_bdg_data():
     try:
-        options = Options()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
+        url = "https://bdg8.vip/#/saasLott"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        driver.get("https://bdg8.vip/#/saasLott")
-        time.sleep(5)
-        
-        elements = driver.find_elements(By.CLASS_NAME, 'game-result')
+        # ⚠️ Inspect करके सही Class Name डालें
+        elements = soup.find_all('div', class_='game-result')
         
         for el in elements:
-            color = el.find_element(By.CLASS_NAME, 'color').text
-            number = el.find_element(By.CLASS_NAME, 'number').text
+            color = el.find('span', class_='color').text.strip()
+            number = el.find('span', class_='number').text.strip()
             slot = "1min"
             size = "Big"
             
@@ -44,13 +38,16 @@ def scrape_bdg_data():
             conn.commit()
             print(f"✅ सेव हुआ: {slot} {color} {number} {size}")
         
-        driver.quit()
         return True
     except Exception as e:
         print(f"⚠️ Scraping Error: {e}")
         return False
 
-# ---------- /scrape Command ----------
+# ---------- Commands ----------
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "👋 नमस्ते! मैं 24/7 BDG Analysis बॉट हूँ!\n\n/scrape – Data Scrape करें\n/addresult – डेटा डालें\n/analysis – ट्रेंड देखें\n/predict – संभावना जानें")
+
 @bot.message_handler(commands=['scrape'])
 def scrape_command(message):
     bot.reply_to(message, "⏳ BDG Data Scrape हो रहा है...")
