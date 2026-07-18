@@ -12,7 +12,7 @@ from collections import Counter
 
 # ---------- Hyperbrowser Imports ----------
 from hyperbrowser import Hyperbrowser
-from hyperbrowser.models import StartClaudeComputerUseTaskParams
+from hyperbrowser.models import StartExtractStructuredDataTaskParams
 
 TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
@@ -53,23 +53,30 @@ def scrape_bdg_fallback():
         print(f"⚠️ Fallback Error: {e}")
         return False
 
-# ---------- Hyperbrowser Scrape ----------
+# ---------- Hyperbrowser Scrape (Structured Data) ----------
 async def scrape_bdg_hyperbrowser():
     try:
         client = Hyperbrowser(api_key=os.getenv("HYPERBROWSER_API_KEY"))
-        result = client.agents.claude_computer_use.start_and_wait(
-            params=StartClaudeComputerUseTaskParams(
-                task="""
-1. https://bdg8.vip/#/saasLott पर जाओ
-2. WinGo 1 Minute के Results वाली Table ढूंढो
-3. Table से Period, Number, Big/Small, और Color निकालो
-4. JSON में दो: [{"period": "...", "number": "...", "size": "...", "color": "..."}]
-""",
-                max_steps=20
+        result = client.agents.extract_structured_data.start_and_wait(
+            params=StartExtractStructuredDataTaskParams(
+                url="https://bdg8.vip/#/saasLott",
+                prompt="WinGo 1 Minute के Results Table से Period, Number, Big/Small, Color निकालो",
+                schema={
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "period": {"type": "string"},
+                            "number": {"type": "string"},
+                            "size": {"type": "string"},
+                            "color": {"type": "string"}
+                        }
+                    }
+                }
             )
         )
         if result.data:
-            scraped_data = json.loads(result.data.final_result)
+            scraped_data = result.data
             count = 0
             for item in scraped_data:
                 period = item.get('period', '')
@@ -83,7 +90,7 @@ async def scrape_bdg_hyperbrowser():
                               (period, color, number, size, datetime.now(), win))
                     conn.commit()
                     count += 1
-            print(f"✅ Hyperbrowser: {count} Results सेव हुए!")
+            print(f"✅ Hyperbrowser (Structured): {count} Results सेव हुए!")
             return True
         return False
     except Exception as e:
@@ -120,7 +127,7 @@ def add_result(message):
         bot.reply_to(message, "❌ फॉर्मेट: /addresult 1min Green 7 Big")
 
 # ---------- /scrape ----------
-@bot.message_handler(commands=['scrape'])
+@bot.message_handler(commands(['scrape']))
 def scrape_command(message):
     bot.reply_to(message, "⏳ Hyperbrowser से Data Scrape हो रहा है...")
     result = asyncio.run(scrape_bdg_hyperbrowser())
@@ -236,3 +243,4 @@ thread.start()
 
 # ---------- BOT RUN ----------
 bot.infinity_polling()
+
