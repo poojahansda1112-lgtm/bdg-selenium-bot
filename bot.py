@@ -5,6 +5,7 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 import time
+import threading
 
 TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
@@ -24,6 +25,7 @@ def scrape_bdg_data():
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         rows = soup.find_all('tr')
+        count = 0
         for row in rows:
             cols = row.find_all('td')
             if len(cols) >= 4:
@@ -32,27 +34,31 @@ def scrape_bdg_data():
                 size = cols[2].text.strip()
                 color = cols[3].text.strip()
                 win = "Win" if color and number else "Loose"
-                c.execute("INSERT INTO results (period, color, number, size, timestamp, win) VALUES (?, ?, ?, ?, ?, ?)",
-                          (period, color, number, size, datetime.now(), win))
-                conn.commit()
-                print(f"✅ सेव हुआ: {period} {color} {number} {size} {win}")
+                
+                # Check if period already exists
+                c.execute("SELECT * FROM results WHERE period = ?", (period,))
+                if not c.fetchone():
+                    c.execute("INSERT INTO results (period, color, number, size, timestamp, win) VALUES (?, ?, ?, ?, ?, ?)",
+                              (period, color, number, size, datetime.now(), win))
+                    conn.commit()
+                    count += 1
+        print(f"✅ {count} नए Results सेव हुए!")
         return True
     except Exception as e:
         print(f"⚠️ Scraping Error: {e}")
         return False
 
+# ---------- Auto-Scrape Loop (हर 5 मिनट) ----------
+def auto_scrape():
+    while True:
+        print("⏳ Auto-Scrape हो रहा है...")
+        scrape_bdg_data()
+        time.sleep(300)  # 5 मिनट
+
+# ---------- Commands ----------
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "👋 नमस्ते! मैं 24/7 BDG Wingo 1 Minute Bot हूँ!\n\n/scrape – Data Scrape करें\n/analysis – ट्रेंड देखें\n/predict – संभावना जानें\n/result – Win/Loose देखें")
-
-@bot.message_handler(commands=['scrape'])
-def scrape_command(message):
-    bot.reply_to(message, "⏳ BDG Wingo 1 Minute Data Scrape हो रहा है...")
-    result = scrape_bdg_data()
-    if result:
-        bot.reply_to(message, "✅ नया Data Database में सेव हो गया!")
-    else:
-        bot.reply_to(message, "⚠️ Scraping में Error आई! Logs Check करें।")
+    bot.reply_to(message, "👋 नमस्ते! मैं 24/7 Auto-Scrape BDG Wingo 1 Minute Bot हूँ!\n\n/analysis – ट्रेंड देखें\n/predict – संभावना जानें\n/result – Win/Loose देखें")
 
 @bot.message_handler(commands=['analysis'])
 def analysis(message):
@@ -64,11 +70,11 @@ def analysis(message):
             reply += f"🕒 {period} | {color} {number} {size} | {win}\n"
         bot.reply_to(message, reply)
     else:
-        bot.reply_to(message, "📊 अभी कोई डेटा नहीं! /scrape करें।")
+        bot.reply_to(message, "📊 अभी कोई डेटा नहीं! Auto-Scrape शुरू हो गया है, कुछ मिनट में Data आ जाएगा.")
 
 @bot.message_handler(commands=['predict'])
 def predict(message):
-    c.execute("SELECT color, number, size, COUNT(*) FROM results GROUP BY color, number, size ORDER BY COUNT(*) DESC LIMIT 3")
+    c.execute("SELECT color, number, size, COUNT(*) FROM results WHERE color IS NOT NULL AND color != '' GROUP BY color, number, size ORDER BY COUNT(*) DESC LIMIT 3")
     data = c.fetchall()
     if data:
         reply = "🔮 **सबसे संभावित Results:**\n"
@@ -76,7 +82,7 @@ def predict(message):
             reply += f"🎯 {color} {number} {size} → {count} बार\n"
         bot.reply_to(message, reply)
     else:
-        bot.reply_to(message, "📭 अभी कोई डेटा नहीं! /scrape करें।")
+        bot.reply_to(message, "📭 अभी कोई डेटा नहीं! Auto-Scrape शुरू हो गया है.")
 
 @bot.message_handler(commands=['result'])
 def result(message):
@@ -87,6 +93,12 @@ def result(message):
         emoji = "✅" if win == "Win" else "❌"
         bot.reply_to(message, f"📊 **Last Result:**\n🕒 Period: {period}\n🎯 {color} {number} {size}\n{emoji} {win}")
     else:
-        bot.reply_to(message, "📭 अभी कोई Result नहीं! /scrape करें।")
+        bot.reply_to(message, "📭 अभी कोई Result नहीं! Auto-Scrape शुरू हो गया है.")
 
+# ---------- Start Auto-Scrape in Background ----------
+thread = threading.Thread(target=auto_scrape)
+thread.daemon = True
+thread.start()
+
+# ---------- BOT RUN ----------
 bot.infinity_polling()
