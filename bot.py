@@ -28,8 +28,11 @@ conn.commit()
 def scrape_bdg_fallback():
     try:
         url = "https://bdg8.vip/#/saasLott"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+        response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         rows = soup.find_all('tr')
         count = 0
@@ -61,11 +64,12 @@ async def scrape_bdg_hyperbrowser():
             params=StartClaudeComputerUseTaskParams(
                 task="""
 1. https://bdg8.vip/#/saasLott पर जाओ
-2. Page Load होने का Wait करो (5 सेकंड)
+2. Page Load होने के लिए 55 सेकंड Wait करो
 3. 'WinGo 1 Min' वाली Table ढूंढो
-4. Table से Period, Number, Big/Small, Color निकालो
-5. JSON में दो: [{"period": "...", "number": "...", "size": "...", "color": "..."}]
-6. अगर Table न मिले, तो खाली JSON [] दो
+4. अगर Table न मिले, तो 'WinGo' Search करो
+5. Table से Period, Number, Big/Small, Color निकालो
+6. JSON में दो: [{"period": "...", "number": "...", "size": "...", "color": "..."}]
+7. अगर Table न मिले, तो खाली JSON [] दो
 """,
                 max_steps=20
             )
@@ -85,7 +89,7 @@ async def scrape_bdg_hyperbrowser():
                               (period, color, number, size, datetime.now(), win))
                     conn.commit()
                     count += 1
-            print(f"✅ Hyperbrowser (Claude): {count} Results सेव हुए!")
+            print(f"✅ Hyperbrowser: {count} Results सेव हुए!")
             return True
         return False
     except Exception as e:
@@ -237,4 +241,4 @@ thread.daemon = True
 thread.start()
 
 # ---------- BOT RUN ----------
-bot.infinity_polling() 
+bot.infinity_polling()
