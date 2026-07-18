@@ -59,11 +59,12 @@ async def scrape_bdg_hyperbrowser():
         client = Hyperbrowser(api_key=os.getenv("HYPERBROWSER_API_KEY"))
         result = client.agents.claude_computer_use.start_and_wait(
             params=StartClaudeComputerUseTaskParams(
-                task="""
-                https://bdg8.vip/#/saasLott पर जाओ और WinGo 1 Minute के आखिरी 10 Results निकालो।
-                Results को Period, Number, Big/Small, और Color के हिसाब से JSON में दो।
-                JSON format: [{"period": "...", "number": "...", "size": "...", "color": "..."}]
-                """,
+                task=   task="""
+1. https://bdg8.vip/#/saasLott पर जाओ
+2. WinGo 1 Minute के Results वाली Table ढूंढो
+3. Table से Period, Number, Big/Small, और Color निकालो
+4. JSON में दो: [{"period": "...", "number": "...", "size": "...", "color": "..."}]
+""",
                 max_steps=20
             )
         )
