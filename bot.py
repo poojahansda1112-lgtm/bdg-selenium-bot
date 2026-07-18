@@ -127,7 +127,7 @@ def add_result(message):
         bot.reply_to(message, "❌ फॉर्मेट: /addresult 1min Green 7 Big")
 
 # ---------- /scrape ----------
-@bot.message_handler(commands(['scrape']))
+@bot.message_handler(commands=['scrape'])
 def scrape_command(message):
     bot.reply_to(message, "⏳ Hyperbrowser से Data Scrape हो रहा है...")
     result = asyncio.run(scrape_bdg_hyperbrowser())
@@ -243,4 +243,3 @@ thread.start()
 
 # ---------- BOT RUN ----------
 bot.infinity_polling()
-
