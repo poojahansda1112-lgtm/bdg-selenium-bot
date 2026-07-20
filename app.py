@@ -1,142 +1,166 @@
 from playwright.sync_api import sync_playwright
-from flask import Flask, jsonify
+import requests
 import time
 import re
 
-app = Flask(__name__)
+# 🔑 YOUR BOT TOKEN
+BOT_TOKEN = "8706584781:AAGRh9gFNu6RbsuS5v9t076N9se2WGon4YI"
+TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 def scrape_bdgdu():
-    """Scrape all data from bdgdu.com"""
+    """Scrape data from bdgdu.com"""
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+                args=['--no-sandbox', '--disable-setuid-sandbox']
             )
             page = browser.new_page()
             
-            print("🌐 Loading website...")
             page.goto("http://bdgdu.com/#/", timeout=60000)
+            page.wait_for_load_state("networkidle")
+            time.sleep(3)
             
-            # Wait for JavaScript to fully load
-            page.wait_for_load_state("networkidle", timeout=30000)
-            time.sleep(5)
-            
-            print("✅ Page loaded, extracting data...")
-            
-            # 1. Page title
             title = page.title()
-            
-            # 2. All links
             links = page.eval_on_selector_all('a', 'els => els.map(el => el.href)')
             
-            # 3. All images
-            images = page.eval_on_selector_all('img', 'els => els.map(el => el.src)')
-            
-            # 4. All buttons
-            buttons = page.eval_on_selector_all('button', 'els => els.map(el => el.innerText)')
-            
-            # 5. All divs with text
-            all_divs = page.eval_on_selector_all('div', 'els => els.map(el => el.innerText)')
-            
-            # 6. All paragraphs
-            paragraphs = page.eval_on_selector_all('p', 'els => els.map(el => el.innerText)')
-            
-            # 7. All headings
-            headings = page.eval_on_selector_all('h1, h2, h3, h4, h5, h6', 'els => els.map(el => el.innerText)')
-            
-            # 8. All spans with text
-            spans = page.eval_on_selector_all('span', 'els => els.map(el => el.innerText)')
-            
-            # 9. All classes containing "game", "result", "color", "number"
             game_data = []
             try:
-                # Find elements with game-related classes
-                elements = page.query_selector_all('[class*="game"], [class*="result"], [class*="color"], [class*="number"], [class*="score"]')
-                for el in elements[:50]:
+                elements = page.query_selector_all('[class*="game"], [class*="result"], [class*="color"], [class*="number"]')
+                for el in elements[:20]:
                     text = el.inner_text()
                     if text.strip():
                         game_data.append(text)
             except:
                 pass
             
-            # 10. Complete HTML
-            full_html = page.content()
-            
+            body_text = page.inner_text('body')
             browser.close()
             
             return {
                 "success": True,
                 "title": title,
-                "total_links": len(links),
-                "links": links[:50],
-                "images": images[:20],
-                "buttons": buttons[:20],
-                "headings": headings[:20],
-                "paragraphs": paragraphs[:20],
-                "divs": all_divs[:30],
-                "spans": spans[:30],
-                "game_related_data": game_data[:30],
-                "body_preview": " ".join(paragraphs)[:1000],
-                "html_length": len(full_html)
+                "links_count": len(links),
+                "links": links[:10],
+                "game_data": game_data[:10],
+                "body_preview": body_text[:500]
             }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def send_message(chat_id, text):
+    """Send message to Telegram"""
+    url = f"{TELEGRAM_API}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    requests.post(url, json=payload)
+
+def handle_message(update):
+    """Handle incoming messages"""
+    if "message" in update:
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"].get("text", "")
+        
+        if text == "/start":
+            msg = """🤖 <b>BDGDU Scraper Bot</b>
             
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+📌 <b>Commands:</b>
+/scrape - Get latest data
+/links - Get all links
+/game - Get game data
+/help - Show this message
 
-@app.route('/')
-def home():
-    return """
-    <h1>🔄 BDGDU Scraper</h1>
-    <ul>
-        <li><a href="/scrape">/scrape</a> - Get all data in JSON</li>
-        <li><a href="/html">/html</a> - Get full HTML</li>
-        <li><a href="/links">/links</a> - Get only links</li>
-        <li><a href="/game-data">/game-data</a> - Get game related data</li>
-        <li><a href="/text">/text</a> - Get all text</li>
-    </ul>
-    """
+🔹 Made with ❤️"""
+            send_message(chat_id, msg)
+            
+        elif text == "/scrape":
+            send_message(chat_id, "⏳ Scraping in progress...")
+            data = scrape_bdgdu()
+            
+            if data["success"]:
+                msg = f"""✅ <b>Scraping Complete!</b>
+                
+📌 <b>Title:</b> {data['title']}
+🔗 <b>Links Found:</b> {data['links_count']}
+📝 <b>Preview:</b> {data['body_preview'][:200]}...
 
-@app.route('/scrape')
-def get_data():
-    return jsonify(scrape_bdgdu())
+<a href="https://bdgdu.com">Visit Website</a>"""
+            else:
+                msg = f"❌ Error: {data['error']}"
+            
+            send_message(chat_id, msg)
+            
+        elif text == "/links":
+            send_message(chat_id, "⏳ Fetching links...")
+            data = scrape_bdgdu()
+            
+            if data["success"] and data["links"]:
+                links_text = "\n".join([f"🔗 {link}" for link in data["links"][:10]])
+                msg = f"<b>Links:</b>\n{links_text}"
+            else:
+                msg = "❌ No links found or error occurred"
+            
+            send_message(chat_id, msg)
+            
+        elif text == "/game":
+            send_message(chat_id, "⏳ Fetching game data...")
+            data = scrape_bdgdu()
+            
+            if data["success"] and data["game_data"]:
+                game_text = "\n".join([f"🎯 {item}" for item in data["game_data"]])
+                msg = f"<b>Game Data:</b>\n{game_text}"
+            else:
+                msg = "❌ No game data found"
+            
+            send_message(chat_id, msg)
+            
+        elif text == "/help":
+            msg = """📚 <b>Help Menu</b>
 
-@app.route('/html')
-def get_html():
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=['--no-sandbox'])
-            page = browser.new_page()
-            page.goto("http://bdgdu.com/#/", timeout=60000)
-            page.wait_for_load_state("networkidle")
-            html = page.content()
-            browser.close()
-        return html
-    except Exception as e:
-        return f"Error: {e}"
+/scrape - Get complete scraped data
+/links - Get all links from page
+/game - Get game related data
+/start - Show welcome message
+/help - Show this menu
 
-@app.route('/links')
-def get_links():
-    data = scrape_bdgdu()
-    return jsonify(data.get('links', []))
+<b>Developer:</b> @YourUsername"""
+            send_message(chat_id, msg)
+            
+        else:
+            send_message(chat_id, "❌ Unknown command. Type /help for available commands.")
 
-@app.route('/game-data')
-def get_game_data():
-    data = scrape_bdgdu()
-    return jsonify(data.get('game_related_data', []))
+def get_updates(offset=None):
+    """Get new messages from Telegram"""
+    url = f"{TELEGRAM_API}/getUpdates"
+    params = {"timeout": 30}
+    if offset:
+        params["offset"] = offset
+    
+    response = requests.get(url, params=params)
+    return response.json()
 
-@app.route('/text')
-def get_text():
-    data = scrape_bdgdu()
-    return jsonify({
-        'title': data.get('title'),
-        'headings': data.get('headings'),
-        'paragraphs': data.get('paragraphs')
-    })
+def main():
+    """Main bot loop"""
+    print("🤖 Bot is running...")
+    offset = None
+    
+    while True:
+        try:
+            updates = get_updates(offset)
+            
+            if "result" in updates:
+                for update in updates["result"]:
+                    handle_message(update)
+                    offset = update["update_id"] + 1
+            
+            time.sleep(2)
+            
+        except Exception as e:
+            print(f"Error: {e}")
+            time.sleep(5)
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+if __name__ == "__main__":
+    main()
