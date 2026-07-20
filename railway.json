@@ -4,7 +4,7 @@
     "buildCommand": "apt-get update && apt-get install -y wget gnupg && pip install -r requirements.txt && playwright install chromium && playwright install-deps"
   },
   "deploy": {
-    "startCommand": "python app.py",
+    "startCommand": "python telegram_bot.py",
     "healthcheckPath": "/",
     "restartPolicyType": "ON_FAILURE"
   }
