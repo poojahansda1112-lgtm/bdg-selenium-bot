@@ -5,6 +5,11 @@
   },
   "deploy": {
     "startCommand": "python telegram_bot.py",
-    "healthcheckPath": "/"
+    "healthcheckPath": "/",
+    "restartPolicyType": "ON_FAILURE",
+    "restart": {
+      "maxAttempts": 10,
+      "policy": "ON_FAILURE"
+    }
   }
 } 
