@@ -4,7 +4,7 @@ import requests
 app = Flask(__name__)
 
 # 🔑 Your Bot Token
-BOT_TOKEN = "8706584781:AAGRh9gFNu6RbsuS5v9t076N9se2WGon4YI"
+BOT_TOKEN = "8938863154:AAGByeSmRCAPg35if4hwFdhRis-55nibq5I"
 
 def send_message(chat_id, text):
     """Send message to Telegram"""
