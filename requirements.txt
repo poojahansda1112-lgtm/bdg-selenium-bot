@@ -1,10 +1,2 @@
- # ============================================
-# 📁 FILE: requirements.txt
-# 📝 DESCRIPTION: Python dependencies
-# ============================================
-
-# 🤖 Telegram Bot
-python-telegram-bot==20.7
-
-# 🌐 Web Scraping (Playwright)
+ python-telegram-bot==20.7
 playwright==1.45.0
