@@ -1,6 +1,6 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: Main Telegram Bot Code
+# 📝 DESCRIPTION: BDG Smart Prediction Bot
 # 🎯 FEATURES: Auto Fetch, Pattern Detection, Live Prediction
 # ============================================
 
@@ -17,10 +17,10 @@ from playwright.async_api import async_playwright
 logging.basicConfig(level=logging.INFO)
 
 # ============================================
-# 📁 DATA STORE - JSON File Ke Saath Kaam Karega
+# 📁 DATA STORE - JSON File
 # ============================================
 
-DATA_FILE = "bdg_data.json"  # 📂 Data store file
+DATA_FILE = "bdg_data.json"
 
 def load_data():
     """📥 JSON file se data load karein"""
@@ -35,61 +35,80 @@ def save_data(data):
         json.dump(data, f, indent=2)
 
 # ============================================
-# 🤖 PLAYWRIGHT SCRAPER - BDG Game Se Data Fetch Karega
+# 🤖 PLAYWRIGHT SCRAPER - Multiple URLs
 # ============================================
 
 async def scrape_bdg_live():
     """
     🌐 BDG Game se live data scrape karein
-    📌 Returns: current_period, history (last 20 results)
+    📌 Multiple URLs try karega
+    📊 Returns: current_period, history (last 20 results)
     """
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             
-            # 🔗 BDG Game URL (working mirror)
-            await page.goto("https://bdg7963.com", timeout=30000)
+            # Multiple mirror URLs
+            urls = [
+                "https://bdg7963.com",
+                "https://7bdg.com",
+                "https://bdg5840.com",
+                "https://bdg5945.com",
+                "https://bdgarchery.com"
+            ]
             
-            # ⏳ Page load hone ka wait
-            await page.wait_for_timeout(5000)
+            data = None
+            current_period = "N/A"
             
-            # 📌 Live period number
-            period_element = await page.query_selector(".period-number")
-            current_period = await period_element.text_content() if period_element else "N/A"
-            
-            # 📊 Table se data nikaalna
-            rows = await page.query_selector_all("table tbody tr")
-            data = []
-            
-            for row in rows[:20]:  # Sirf last 20 entries
-                cols = await row.query_selector_all("td")
-                if len(cols) >= 4:
-                    period = await cols[0].text_content()
-                    number = await cols[1].text_content()
-                    color = await cols[2].text_content()
-                    size = await cols[3].text_content()
+            for url in urls:
+                try:
+                    await page.goto(url, timeout=15000)
+                    await page.wait_for_timeout(3000)
                     
-                    data.append({
-                        "period": period.strip(),
-                        "number": int(number.strip()),
-                        "color": color.strip().lower(),
-                        "size": size.strip().lower(),
-                        "timestamp": str(datetime.now())
-                    })
+                    # Check if page loaded
+                    period_element = await page.query_selector(".period-number")
+                    if period_element:
+                        current_period = await period_element.text_content() or "N/A"
+                    
+                    # Table se data nikaalna
+                    rows = await page.query_selector_all("table tbody tr")
+                    if rows and len(rows) > 0:
+                        data = []
+                        for row in rows[:20]:
+                            cols = await row.query_selector_all("td")
+                            if len(cols) >= 4:
+                                period = await cols[0].text_content()
+                                number = await cols[1].text_content()
+                                color = await cols[2].text_content()
+                                size = await cols[3].text_content()
+                                
+                                data.append({
+                                    "period": period.strip(),
+                                    "number": int(number.strip()),
+                                    "color": color.strip().lower(),
+                                    "size": size.strip().lower(),
+                                    "timestamp": str(datetime.now())
+                                })
+                        break  # Data mil gaya toh loop break
+                except Exception as e:
+                    logging.warning(f"⚠️ URL failed: {url} - {e}")
+                    continue  # Yeh URL kaam nahi kiya, next try karo
             
             await browser.close()
             
-            return {
-                "current_period": current_period.strip(),
-                "history": data
-            }
+            if data:
+                return {
+                    "current_period": current_period.strip(),
+                    "history": data
+                }
+            return None
     except Exception as e:
         logging.error(f"❌ Scrape error: {e}")
         return None
 
 # ============================================
-# 🧠 PATTERN DETECTION - Khud Pattern Samjhega
+# 🧠 PATTERN DETECTION - Auto Pattern Samjhega
 # ============================================
 
 def detect_pattern(data):
@@ -369,6 +388,30 @@ async def reset_data(update, context):
     save_data([])
     await update.message.reply_text("🗑️ All data deleted!")
 
+async def add_manual(update, context):
+    """📝 /add command - Manual data entry (for testing)"""
+    try:
+        color = context.args[0].lower()
+        number = int(context.args[1])
+        size = context.args[2].lower() if len(context.args) > 2 else "unknown"
+        
+        if color not in ['red', 'green', 'violet']:
+            await update.message.reply_text("❗ Use: red, green, violet")
+            return
+        
+        data = load_data()
+        data.append({
+            "color": color,
+            "number": number,
+            "size": size,
+            "period": str(datetime.now().strftime("%Y%m%d%H%M%S")),
+            "timestamp": str(datetime.now())
+        })
+        save_data(data)
+        await update.message.reply_text(f"✅ Saved: {color.upper()} {number} ({size})")
+    except:
+        await update.message.reply_text("❗ Use: /add <color> <number> <size>\nExample: /add green 7 big")
+
 async def button_callback(update, context):
     """🔄 Button callbacks handle karein"""
     query = update.callback_query
@@ -413,24 +456,27 @@ async def button_callback(update, context):
             )
 
 # ============================================
-# ⏰ AUTO FETCH SCHEDULE - Har 30 Seconds Mein Fetch Karega
+# ⏰ AUTO FETCH SCHEDULE - Har 30 Seconds
 # ============================================
 
 async def auto_fetch():
     """⏰ Auto fetch data every 30 seconds"""
     while True:
-        result = await scrape_bdg_live()
-        if result and result['history']:
-            existing = load_data()
-            existing_periods = {item.get('period') for item in existing}
-            new_count = 0
-            for item in result['history']:
-                if item['period'] not in existing_periods:
-                    existing.append(item)
-                    new_count += 1
-            if new_count > 0:
-                save_data(existing)
-                print(f"✅ Auto-fetched {new_count} new records")
+        try:
+            result = await scrape_bdg_live()
+            if result and result['history']:
+                existing = load_data()
+                existing_periods = {item.get('period') for item in existing}
+                new_count = 0
+                for item in result['history']:
+                    if item['period'] not in existing_periods:
+                        existing.append(item)
+                        new_count += 1
+                if new_count > 0:
+                    save_data(existing)
+                    print(f"✅ Auto-fetched {new_count} new records")
+        except Exception as e:
+            logging.error(f"Auto-fetch error: {e}")
         await asyncio.sleep(30)  # ⏰ Har 30 seconds
 
 # ============================================
@@ -454,6 +500,7 @@ def main():
     app.add_handler(CommandHandler("round", current_round))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("reset", reset_data))
+    app.add_handler(CommandHandler("add", add_manual))  # Manual entry for testing
     app.add_handler(CallbackQueryHandler(button_callback))
     
     print("✅ BDG Smart Bot is running...")
@@ -465,4 +512,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main() 
+    main()
