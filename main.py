@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG Smart Prediction Bot
-# 🎯 FEATURES: Auto Fetch, Pattern Detection, Live Prediction
+# 📝 DESCRIPTION: Auto Scrape + Data Store Bot
+# 🎯 FEATURES: Auto Scrape, Manual Add, Pattern, Prediction
 # ============================================
 
 import os
@@ -13,7 +13,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from playwright.async_api import async_playwright
 
-# 📊 Logging setup
+# 📊 Logging
 logging.basicConfig(level=logging.INFO)
 
 # ============================================
@@ -35,21 +35,21 @@ def save_data(data):
         json.dump(data, f, indent=2)
 
 # ============================================
-# 🤖 PLAYWRIGHT SCRAPER - Multiple URLs
+# 🤖 PLAYWRIGHT SCRAPER - Auto Scrape
 # ============================================
 
 async def scrape_bdg_live():
     """
     🌐 BDG Game se live data scrape karein
-    📌 Multiple URLs try karega
-    📊 Returns: current_period, history (last 20 results)
+    📌 Returns: current_period, history (last 20 results)
     """
     try:
         async with async_playwright() as p:
+            # Browser launch
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             
-            # Multiple mirror URLs
+            # Multiple mirror URLs (agar ek kaam na kare toh doosra try kare)
             urls = [
                 "https://bdg7963.com",
                 "https://7bdg.com",
@@ -63,6 +63,7 @@ async def scrape_bdg_live():
             
             for url in urls:
                 try:
+                    print(f"🌐 Trying URL: {url}")
                     await page.goto(url, timeout=15000)
                     await page.wait_for_timeout(3000)
                     
@@ -70,12 +71,14 @@ async def scrape_bdg_live():
                     period_element = await page.query_selector(".period-number")
                     if period_element:
                         current_period = await period_element.text_content() or "N/A"
+                        print(f"✅ Period found: {current_period}")
                     
                     # Table se data nikaalna
                     rows = await page.query_selector_all("table tbody tr")
                     if rows and len(rows) > 0:
+                        print(f"✅ Found {len(rows)} rows")
                         data = []
-                        for row in rows[:20]:
+                        for row in rows[:20]:  # Sirf last 20 entries
                             cols = await row.query_selector_all("td")
                             if len(cols) >= 4:
                                 period = await cols[0].text_content()
@@ -91,123 +94,122 @@ async def scrape_bdg_live():
                                     "timestamp": str(datetime.now())
                                 })
                         break  # Data mil gaya toh loop break
+                    else:
+                        print(f"⚠️ No rows found on {url}")
                 except Exception as e:
-                    logging.warning(f"⚠️ URL failed: {url} - {e}")
+                    print(f"❌ URL failed: {url} - {e}")
                     continue  # Yeh URL kaam nahi kiya, next try karo
             
             await browser.close()
             
             if data:
+                print(f"✅ Scraped {len(data)} records")
                 return {
                     "current_period": current_period.strip(),
                     "history": data
                 }
-            return None
+            else:
+                print("❌ No data scraped from any URL")
+                return None
     except Exception as e:
         logging.error(f"❌ Scrape error: {e}")
         return None
 
 # ============================================
-# 🧠 PATTERN DETECTION - Auto Pattern Samjhega
+# 📝 MANUAL DATA ENTRY
 # ============================================
 
-def detect_pattern(data):
-    """
-    🎯 Data ke hisaab se pattern detect karein
-    📊 Returns: pattern_type, streak, best_color, probability
-    """
-    if len(data) < 5:
-        return None
-    
-    # 📊 Last 20 results
-    last_20 = data[-20:] if len(data) >= 20 else data
-    
-    # 🔢 Color frequency count
-    color_count = {}
-    for item in last_20:
-        color = item['color']
-        color_count[color] = color_count.get(color, 0) + 1
-    
-    # 📈 Current streak
-    streak_color = last_20[-1]['color']
-    streak_count = 1
-    for i in range(len(last_20)-2, -1, -1):
-        if last_20[i]['color'] == streak_color:
-            streak_count += 1
-        else:
-            break
-    
-    # 🎯 Pattern type detect karein
-    pattern_type = "Mixed"
-    if streak_count >= 3:
-        pattern_type = f"{streak_color.upper()} Streak"
-    elif len(set([item['color'] for item in last_20[-5:]])) == 1:
-        pattern_type = f"{last_20[-1]['color'].upper()} Dominating"
-    elif len(set([item['color'] for item in last_20[-10:]])) == 3:
-        pattern_type = "Balanced"
-    
-    # 🔮 Prediction (Probability)
-    total = len(last_20)
-    probs = {}
-    for color in ['red', 'green', 'violet']:
-        count = color_count.get(color, 0)
-        # 🎯 Streak bonus
-        if color == streak_color:
-            count += streak_count * 2
-        probs[color] = (count / (total + streak_count * 2)) * 100
-    
-    # 🏆 Best color
-    best_color = max(probs, key=probs.get)
-    
-    # 🔢 Expected number (average)
-    avg_number = sum([item['number'] for item in last_20]) / len(last_20)
-    expected_number = round(avg_number)
-    
-    return {
-        "pattern_type": pattern_type,
-        "streak_color": streak_color,
-        "streak_count": streak_count,
-        "best_color": best_color,
-        "best_probability": round(probs[best_color], 1),
-        "expected_number": expected_number,
-        "color_count": color_count,
-        "last_20": last_20
-    }
+async def add_result(update, context):
+    """📝 /add command - Manual data store"""
+    try:
+        if len(context.args) < 2:
+            await update.message.reply_text(
+                "❗ **Use:** /add <color> <number> <size>\n"
+                "📌 **Example:** /add green 7 big\n\n"
+                "🟢 Colors: red, green, violet\n"
+                "📊 Size: big, small (optional)"
+            )
+            return
+        
+        color = context.args[0].lower()
+        number = int(context.args[1])
+        size = context.args[2].lower() if len(context.args) > 2 else "unknown"
+        
+        if color not in ['red', 'green', 'violet']:
+            await update.message.reply_text("❗ Use: red, green, violet")
+            return
+        
+        data = load_data()
+        data.append({
+            "color": color,
+            "number": number,
+            "size": size,
+            "period": datetime.now().strftime("%Y%m%d%H%M%S%f"),
+            "timestamp": str(datetime.now())
+        })
+        save_data(data)
+        
+        await update.message.reply_text(
+            f"✅ Saved: {color.upper()} {number} ({size})\n"
+            f"📦 Total: {len(data)} records"
+        )
+    except ValueError:
+        await update.message.reply_text("❗ Number invalid hai. Use: /add green 7 big")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
 
 # ============================================
-# 🤖 TELEGRAM BOT COMMANDS
+# 📊 BULK DATA ENTRY
 # ============================================
 
-async def start(update, context):
-    """🚀 /start command - Welcome message with buttons"""
-    keyboard = [
-        [InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://bdg7963.com"})],
-        [InlineKeyboardButton("📊 Auto Detect Pattern", callback_data="pattern")],
-        [InlineKeyboardButton("🔮 Live Prediction", callback_data="predict")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "🎯 **BDG Smart Prediction Bot Active!**\n\n"
-        "🤖 Bot automatically detects patterns\n"
-        "📡 Fetches live data from BDG Game\n"
-        "🔮 Gives predictions with live period\n\n"
-        "**Commands:**\n"
-        "/fetch - Fetch latest data\n"
-        "/pattern - Show current pattern\n"
-        "/predict - Live prediction\n"
-        "/round - Current round status\n"
-        "/stats - Total statistics",
-        reply_markup=reply_markup
-    )
+async def add_bulk(update, context):
+    """📊 /addbulk command - Multiple records ek saath"""
+    try:
+        text = ' '.join(context.args)
+        entries = text.split(',')
+        
+        data = load_data()
+        count = 0
+        
+        for entry in entries:
+            entry = entry.strip()
+            if not entry:
+                continue
+            parts = entry.split()
+            if len(parts) >= 2:
+                color = parts[0].lower()
+                number = int(parts[1])
+                size = parts[2].lower() if len(parts) > 2 else "unknown"
+                
+                if color in ['red', 'green', 'violet']:
+                    data.append({
+                        "color": color,
+                        "number": number,
+                        "size": size,
+                        "period": datetime.now().strftime("%Y%m%d%H%M%S%f"),
+                        "timestamp": str(datetime.now())
+                    })
+                    count += 1
+        
+        save_data(data)
+        await update.message.reply_text(
+            f"✅ {count} records saved!\n"
+            f"📦 Total: {len(data)} records"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
+
+# ============================================
+# 📥 AUTO FETCH / SCRAPE COMMAND
+# ============================================
 
 async def fetch_data(update, context):
-    """📡 /fetch command - Live data fetch karein"""
-    await update.message.reply_text("📡 Fetching live data from BDG Game...")
+    """📡 /fetch command - Auto scrape from BDG Game"""
+    msg = await update.message.reply_text("📡 Scraping live data from BDG Game...")
     
     result = await scrape_bdg_live()
     if not result:
-        await update.message.reply_text("❌ Failed to fetch data. Please try again.")
+        await msg.edit_text("❌ Failed to scrape data. Please try again.")
         return
     
     data = result['history']
@@ -225,147 +227,44 @@ async def fetch_data(update, context):
         
         save_data(existing)
         
-        # 🔮 Pattern detect automatically
-        pattern = detect_pattern(existing)
-        
-        msg = f"""
-✅ **Data Fetched Successfully!**
-📌 Live Period: {current_period}
-📊 New Records: {new_count}
-📦 Total Records: {len(existing)}
-
-🔮 **Auto Pattern Detection:**
-🎯 Pattern Type: {pattern['pattern_type'] if pattern else 'Need more data'}
-📈 Current Streak: {pattern['streak_count']}x {pattern['streak_color'].upper() if pattern else 'N/A'} in a row
-🔥 Hot Color: {pattern['best_color'].upper() if pattern else 'N/A'} ({pattern['best_probability']}% chance)
-"""
-        await update.message.reply_text(msg)
+        await msg.edit_text(
+            f"✅ **Scraped Successfully!**\n"
+            f"📌 Live Period: {current_period}\n"
+            f"📊 New Records: {new_count}\n"
+            f"📦 Total Records: {len(existing)}\n\n"
+            f"💡 Use /view to see data"
+        )
     else:
-        await update.message.reply_text("❌ No data found.")
+        await msg.edit_text("❌ No data found on website.")
 
-async def show_pattern(update, context):
-    """📊 /pattern command - Current pattern dikhaye"""
-    data = load_data()
-    if len(data) < 5:
-        await update.message.reply_text("⚠️ Need at least 5 records for pattern detection. Use /fetch first.")
-        return
-    
-    pattern = detect_pattern(data)
-    if not pattern:
-        await update.message.reply_text("⚠️ Not enough data for pattern detection.")
-        return
-    
-    # 🎨 Last 20 pattern
-    colors = [item['color'].upper() for item in pattern['last_20']]
-    pattern_sequence = " → ".join(colors)
-    
-    msg = f"""
-🎯 **Auto Pattern Analysis**
+# ============================================
+# 📋 VIEW DATA
+# ============================================
 
-📌 **Current Pattern Type:** {pattern['pattern_type']}
-
-📊 **Last 20 Results:**
-{pattern_sequence}
-
-📈 **Current Streak:** {pattern['streak_count']}x {pattern['streak_color'].upper()} in a row
-
-🔥 **Hot Color:** {pattern['best_color'].upper()} ({pattern['best_probability']}% chance)
-
-🔢 **Expected Number:** {pattern['expected_number']}
-
-📊 **Distribution (Last 20):**
-🔴 Red: {pattern['color_count'].get('red', 0)}
-🟢 Green: {pattern['color_count'].get('green', 0)}
-🟣 Violet: {pattern['color_count'].get('violet', 0)}
-"""
-    await update.message.reply_text(msg)
-
-async def predict_live(update, context):
-    """🔮 /predict command - Live prediction with period"""
-    await update.message.reply_text("📡 Fetching live data for prediction...")
-    
-    result = await scrape_bdg_live()
-    if not result:
-        await update.message.reply_text("❌ Failed to fetch live data. Please try again.")
-        return
-    
-    current_period = result['current_period']
-    data = result['history']
-    
-    if data:
-        existing = load_data()
-        existing_periods = {item.get('period') for item in existing}
-        for item in data:
-            if item['period'] not in existing_periods:
-                existing.append(item)
-        save_data(existing)
-    
-    all_data = load_data()
-    if len(all_data) < 5:
-        await update.message.reply_text("⚠️ Need more data for prediction. Use /fetch first.")
-        return
-    
-    pattern = detect_pattern(all_data)
-    if not pattern:
-        await update.message.reply_text("⚠️ Not enough data for prediction.")
-        return
-    
-    msg = f"""
-🔮 **LIVE PREDICTION**
-
-📌 **Live Period:** {current_period}
-
-🎯 **Pattern Type:** {pattern['pattern_type']}
-
-🎲 **Best Bet:** {pattern['best_color'].upper()} 
-📊 **Win Probability:** {pattern['best_probability']}%
-
-🔢 **Expected Number:** {pattern['expected_number']}
-
-📈 **Current Streak:** {pattern['streak_count']}x {pattern['streak_color'].upper()} in a row
-
-📊 **Probability Distribution:**
-🔴 Red: {pattern['best_color']} → {pattern['best_probability']}%
-
-💡 Based on last {len(pattern['last_20'])} rounds
-⚠️ Not financial advice. Play responsibly.
-"""
-    await update.message.reply_text(msg)
-
-async def current_round(update, context):
-    """🎯 /round command - Current round status"""
-    data = load_data()
-    total = len(data)
-    
-    if total == 0:
-        await update.message.reply_text("📭 No data yet. Use /fetch first.")
-        return
-    
-    result = await scrape_bdg_live()
-    current_period = result['current_period'] if result else "N/A"
-    
-    pattern = detect_pattern(data)
-    
-    msg = f"""
-🎯 **Current Round Status**
-
-📌 **Live Period:** {current_period}
-📦 **Total Records:** {total}
-
-📈 **Pattern Type:** {pattern['pattern_type'] if pattern else 'Need more data'}
-📊 **Current Streak:** {pattern['streak_count']}x {pattern['streak_color'].upper() if pattern else 'N/A'}
-
-🔥 **Hot Color:** {pattern['best_color'].upper() if pattern else 'N/A'} ({pattern['best_probability']}% chance)
-
-💡 Use /predict for live prediction
-"""
-    await update.message.reply_text(msg)
-
-async def stats(update, context):
-    """📊 /stats command - Total statistics"""
+async def view_data(update, context):
+    """📋 /view command - Last 10 records"""
     data = load_data()
     if not data:
-        await update.message.reply_text("📭 No data yet. Use /fetch first.")
+        await update.message.reply_text("📭 No data yet. Use /add or /fetch")
+        return
+    
+    last_10 = data[-10:] if len(data) >= 10 else data
+    msg = "📊 **Last 10 Records:**\n\n"
+    for idx, item in enumerate(last_10, 1):
+        msg += f"{idx}. {item['color'].upper()} {item['number']} ({item['size']}) - {item.get('period', 'N/A')}\n"
+    
+    msg += f"\n📦 **Total:** {len(data)} records"
+    await update.message.reply_text(msg)
+
+# ============================================
+# 📊 STATISTICS
+# ============================================
+
+async def stats(update, context):
+    """📊 /stats command - Full statistics"""
+    data = load_data()
+    if not data:
+        await update.message.reply_text("📭 No data yet.")
         return
     
     total = len(data)
@@ -373,139 +272,321 @@ async def stats(update, context):
     green = sum(1 for i in data if i['color'] == 'green')
     violet = sum(1 for i in data if i['color'] == 'violet')
     
+    # Last 100 analysis
+    last_100 = data[-100:] if total >= 100 else data
+    
+    # Color frequency
+    color_count = {}
+    for item in last_100:
+        color = item['color']
+        color_count[color] = color_count.get(color, 0) + 1
+    
+    # Streak
+    streak_color = last_100[-1]['color'] if last_100 else 'N/A'
+    streak_count = 1
+    for i in range(len(last_100)-2, -1, -1):
+        if last_100[i]['color'] == streak_color:
+            streak_count += 1
+        else:
+            break
+    
+    hot_color = max(color_count, key=color_count.get) if color_count else 'N/A'
+    
     msg = f"""
-📊 **Total Statistics**
+📊 **Full Statistics**
 
 📦 Total Records: {total}
+
 🔴 Red: {red} ({red/total*100:.1f}%)
 🟢 Green: {green} ({green/total*100:.1f}%)
 🟣 Violet: {violet} ({violet/total*100:.1f}%)
+
+📈 Current Streak: {streak_count}x {streak_color.upper()}
+🔥 Hot Color (Last 100): {hot_color.upper()}
 """
     await update.message.reply_text(msg)
 
+# ============================================
+# 🧠 PATTERN DETECTION
+# ============================================
+
+async def pattern(update, context):
+    """🎯 /pattern command - Pattern analysis"""
+    data = load_data()
+    if len(data) < 5:
+        await update.message.reply_text("⚠️ Need 5+ records. Use /add or /fetch")
+        return
+    
+    last_50 = data[-50:] if len(data) >= 50 else data
+    
+    color_count = {}
+    number_count = {}
+    for item in last_50:
+        color = item['color']
+        num = item['number']
+        color_count[color] = color_count.get(color, 0) + 1
+        number_count[num] = number_count.get(num, 0) + 1
+    
+    # Streak
+    streak_color = last_50[-1]['color']
+    streak_count = 1
+    for i in range(len(last_50)-2, -1, -1):
+        if last_50[i]['color'] == streak_color:
+            streak_count += 1
+        else:
+            break
+    
+    hot_color = max(color_count, key=color_count.get) if color_count else 'N/A'
+    hot_number = max(number_count, key=number_count.get) if number_count else 0
+    
+    # Pattern sequence (last 20)
+    last_20 = last_50[-20:] if len(last_50) >= 20 else last_50
+    pattern_seq = " → ".join([item['color'].upper() for item in last_20])
+    
+    msg = f"""
+🎯 **Pattern Analysis**
+
+📊 Last 50 Distribution:
+🔴 Red: {color_count.get('red', 0)}
+🟢 Green: {color_count.get('green', 0)}
+🟣 Violet: {color_count.get('violet', 0)}
+
+📈 Streak: {streak_count}x {streak_color.upper()}
+🔥 Hot Color: {hot_color.upper()} ({color_count.get(hot_color, 0)}x)
+🎯 Hot Number: {hot_number} ({number_count.get(hot_number, 0)}x)
+
+📋 Last 20 Pattern:
+{pattern_seq}
+"""
+    await update.message.reply_text(msg)
+
+# ============================================
+# 🔮 PREDICTION
+# ============================================
+
+async def predict(update, context):
+    """🔮 /predict command - Prediction based on data"""
+    data = load_data()
+    if len(data) < 5:
+        await update.message.reply_text("⚠️ Need 5+ records. Use /add or /fetch")
+        return
+    
+    # Last 100 for probability
+    last_100 = data[-100:] if len(data) >= 100 else data
+    total = len(last_100)
+    
+    red = sum(1 for i in last_100 if i['color'] == 'red')
+    green = sum(1 for i in last_100 if i['color'] == 'green')
+    violet = sum(1 for i in last_100 if i['color'] == 'violet')
+    
+    prob_red = (red / total) * 100
+    prob_green = (green / total) * 100
+    prob_violet = (violet / total) * 100
+    
+    probs = {'RED': prob_red, 'GREEN': prob_green, 'VIOLET': prob_violet}
+    best = max(probs, key=probs.get)
+    
+    # Number prediction
+    number_count = {}
+    for item in last_100:
+        num = item['number']
+        number_count[num] = number_count.get(num, 0) + 1
+    hot_number = max(number_count, key=number_count.get) if number_count else 0
+    
+    # Streak
+    streak_color = data[-1]['color']
+    streak_count = 1
+    for i in range(len(data)-2, -1, -1):
+        if data[i]['color'] == streak_color:
+            streak_count += 1
+        else:
+            break
+    
+    msg = f"""
+🔮 **Prediction**
+
+🎯 Best Bet: **{best}** ({probs[best]:.1f}%)
+
+📊 Probability Distribution:
+🔴 Red: {prob_red:.1f}%
+🟢 Green: {prob_green:.1f}%
+🟣 Violet: {prob_violet:.1f}%
+
+🎯 Hot Number: {hot_number}
+📈 Current Streak: {streak_count}x {streak_color.upper()}
+
+📦 Based on {total} rounds
+⚠️ Not financial advice. Play responsibly.
+"""
+    await update.message.reply_text(msg)
+
+# ============================================
+# 🗑️ RESET
+# ============================================
+
 async def reset_data(update, context):
     """🗑️ /reset command - Delete all data"""
+    data = load_data()
+    if not data:
+        await update.message.reply_text("📭 No data to delete.")
+        return
+    
     save_data([])
-    await update.message.reply_text("🗑️ All data deleted!")
+    await update.message.reply_text(f"🗑️ {len(data)} records deleted!")
 
-async def add_manual(update, context):
-    """📝 /add command - Manual data entry (for testing)"""
-    try:
-        color = context.args[0].lower()
-        number = int(context.args[1])
-        size = context.args[2].lower() if len(context.args) > 2 else "unknown"
-        
-        if color not in ['red', 'green', 'violet']:
-            await update.message.reply_text("❗ Use: red, green, violet")
-            return
-        
-        data = load_data()
-        data.append({
-            "color": color,
-            "number": number,
-            "size": size,
-            "period": str(datetime.now().strftime("%Y%m%d%H%M%S")),
-            "timestamp": str(datetime.now())
-        })
-        save_data(data)
-        await update.message.reply_text(f"✅ Saved: {color.upper()} {number} ({size})")
-    except:
-        await update.message.reply_text("❗ Use: /add <color> <number> <size>\nExample: /add green 7 big")
+# ============================================
+# 🚀 START
+# ============================================
+
+async def start(update, context):
+    """🚀 /start command"""
+    keyboard = [
+        [InlineKeyboardButton("📥 Scrape & Fetch", callback_data="fetch")],
+        [InlineKeyboardButton("📊 Stats", callback_data="stats")],
+        [InlineKeyboardButton("🔮 Prediction", callback_data="predict")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    data = load_data()
+    total = len(data)
+    
+    await update.message.reply_text(
+        f"🎯 **BDG Auto Scrape + Data Store Bot**\n\n"
+        f"📦 Total Records: {total}\n\n"
+        f"**Commands:**\n"
+        f"/add <color> <number> <size> - Single entry\n"
+        f"/addbulk color num, ... - Bulk entry\n"
+        f"/fetch - Auto scrape from game\n"
+        f"/view - View last 10 records\n"
+        f"/pattern - Pattern analysis\n"
+        f"/predict - Prediction\n"
+        f"/stats - Statistics\n"
+        f"/reset - Delete all data\n\n"
+        f"📌 Example: /add green 7 big",
+        reply_markup=reply_markup
+    )
+
+# ============================================
+# BUTTON CALLBACK
+# ============================================
 
 async def button_callback(update, context):
-    """🔄 Button callbacks handle karein"""
+    """🔄 Button callbacks"""
     query = update.callback_query
     await query.answer()
     
-    if query.data == "pattern":
-        await query.edit_message_text("📊 Detecting pattern...")
-        data = load_data()
-        if len(data) < 5:
-            await query.edit_message_text("⚠️ Need 5+ records. Use /fetch first.")
-            return
-        pattern = detect_pattern(data)
-        if pattern:
-            colors = [item['color'].upper() for item in pattern['last_20']]
-            pattern_sequence = " → ".join(colors)
+    if query.data == "fetch":
+        await query.edit_message_text("📡 Scraping live data from BDG Game...")
+        result = await scrape_bdg_live()
+        if result and result['history']:
+            existing = load_data()
+            existing_periods = {item.get('period') for item in existing}
+            count = 0
+            for item in result['history']:
+                if item['period'] not in existing_periods:
+                    existing.append(item)
+                    count += 1
+            save_data(existing)
             await query.edit_message_text(
-                f"🎯 **Pattern Type:** {pattern['pattern_type']}\n\n"
-                f"📊 **Last 20:** {pattern_sequence}\n"
-                f"📈 **Streak:** {pattern['streak_count']}x {pattern['streak_color'].upper()}\n"
-                f"🔥 **Hot Color:** {pattern['best_color'].upper()} ({pattern['best_probability']}%)"
+                f"✅ {count} new records saved!\n"
+                f"📦 Total: {len(existing)} records"
             )
+        else:
+            await query.edit_message_text("❌ No data scraped.")
+    
+    elif query.data == "stats":
+        data = load_data()
+        if not data:
+            await query.edit_message_text("📭 No data yet.")
+            return
+        total = len(data)
+        red = sum(1 for i in data if i['color'] == 'red')
+        green = sum(1 for i in data if i['color'] == 'green')
+        violet = sum(1 for i in data if i['color'] == 'violet')
+        await query.edit_message_text(
+            f"📊 **Stats**\n"
+            f"📦 Total: {total}\n"
+            f"🔴 Red: {red} ({red/total*100:.1f}%)\n"
+            f"🟢 Green: {green} ({green/total*100:.1f}%)\n"
+            f"🟣 Violet: {violet} ({violet/total*100:.1f}%)"
+        )
     
     elif query.data == "predict":
-        await query.edit_message_text("📡 Fetching live prediction...")
-        result = await scrape_bdg_live()
-        if not result:
-            await query.edit_message_text("❌ Failed to fetch live data.")
-            return
-        current_period = result['current_period']
         data = load_data()
         if len(data) < 5:
-            await query.edit_message_text("⚠️ Need 5+ records. Use /fetch first.")
+            await query.edit_message_text("⚠️ Need 5+ records.")
             return
-        pattern = detect_pattern(data)
-        if pattern:
-            await query.edit_message_text(
-                f"🔮 **LIVE PREDICTION**\n"
-                f"📌 Period: {current_period}\n"
-                f"🎯 Best Bet: {pattern['best_color'].upper()} ({pattern['best_probability']}%)\n"
-                f"🔢 Expected Number: {pattern['expected_number']}\n"
-                f"📈 Streak: {pattern['streak_count']}x {pattern['streak_color'].upper()}"
-            )
+        last_100 = data[-100:] if len(data) >= 100 else data
+        total = len(last_100)
+        red = sum(1 for i in last_100 if i['color'] == 'red')
+        green = sum(1 for i in last_100 if i['color'] == 'green')
+        violet = sum(1 for i in last_100 if i['color'] == 'violet')
+        probs = {
+            'RED': (red/total)*100,
+            'GREEN': (green/total)*100,
+            'VIOLET': (violet/total)*100
+        }
+        best = max(probs, key=probs.get)
+        await query.edit_message_text(
+            f"🔮 **Prediction**\n"
+            f"🎯 Best: {best} ({probs[best]:.1f}%)\n"
+            f"📊 Red: {probs['RED']:.1f}%\n"
+            f"📊 Green: {probs['GREEN']:.1f}%\n"
+            f"📊 Violet: {probs['VIOLET']:.1f}%"
+        )
 
 # ============================================
-# ⏰ AUTO FETCH SCHEDULE - Har 30 Seconds
+# ⏰ AUTO FETCH BACKGROUND (Har 30 Seconds)
 # ============================================
 
 async def auto_fetch():
-    """⏰ Auto fetch data every 30 seconds"""
+    """⏰ Auto fetch every 30 seconds"""
     while True:
         try:
             result = await scrape_bdg_live()
             if result and result['history']:
                 existing = load_data()
                 existing_periods = {item.get('period') for item in existing}
-                new_count = 0
+                count = 0
                 for item in result['history']:
                     if item['period'] not in existing_periods:
                         existing.append(item)
-                        new_count += 1
-                if new_count > 0:
+                        count += 1
+                if count > 0:
                     save_data(existing)
-                    print(f"✅ Auto-fetched {new_count} new records")
+                    print(f"✅ Auto-scraped {count} new records | Total: {len(existing)}")
         except Exception as e:
             logging.error(f"Auto-fetch error: {e}")
-        await asyncio.sleep(30)  # ⏰ Har 30 seconds
+        await asyncio.sleep(30)  # Har 30 seconds
 
 # ============================================
-# 🚀 MAIN - Bot Start Hoga Yahan Se
+# 🚀 MAIN
 # ============================================
 
 def main():
-    """🚀 Bot start karne ka main function"""
     token = os.environ.get("BOT_TOKEN")
     if not token:
-        print("❌ BOT_TOKEN not set!")
+        print("❌ BOT_TOKEN not set! Please set BOT_TOKEN in Railway variables.")
         return
     
     app = Application.builder().token(token).build()
     
-    # 📌 Commands register karein
+    # Commands
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("add", add_result))
+    app.add_handler(CommandHandler("addbulk", add_bulk))
     app.add_handler(CommandHandler("fetch", fetch_data))
-    app.add_handler(CommandHandler("pattern", show_pattern))
-    app.add_handler(CommandHandler("predict", predict_live))
-    app.add_handler(CommandHandler("round", current_round))
+    app.add_handler(CommandHandler("view", view_data))
+    app.add_handler(CommandHandler("pattern", pattern))
+    app.add_handler(CommandHandler("predict", predict))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("reset", reset_data))
-    app.add_handler(CommandHandler("add", add_manual))  # Manual entry for testing
     app.add_handler(CallbackQueryHandler(button_callback))
     
-    print("✅ BDG Smart Bot is running...")
+    print("✅ BDG Auto Scrape Bot is running...")
+    print(f"📁 Data file: {DATA_FILE}")
     
-    # ⏰ Auto-fetch background task start
+    # Auto-fetch background task
     loop = asyncio.get_event_loop()
     loop.create_task(auto_fetch())
     
