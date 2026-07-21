@@ -4,8 +4,8 @@ import datetime
 import os
 import sys
 
-# 🔑 YOUR BOT TOKEN
-BOT_TOKEN = "8706798782:AAEUti6Qh6MApG2GrHXX8GaXbGqRuj7Nz_M"
+# 🔑 BOT TOKEN (Environment variable se lo)
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8706798782:AAEUti6Qh6MApG2GrHXX8GaXbGqRuj7Nz_M")
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 def send_message(chat_id, text):
@@ -69,10 +69,9 @@ def main():
     print("🤖 Bot is running (Polling mode)...")
     print("✅ No webhook required!")
     print("✅ 24/7 mode enabled!")
-    print(f"🔑 Token: {BOT_TOKEN[:10]}...")
+    sys.stdout.flush()
     
     offset = None
-    last_error = 0
     
     while True:
         try:
@@ -85,6 +84,7 @@ def main():
                         text = update["message"].get("text", "")
                         
                         print(f"📨 Received: {text} from {chat_id}")
+                        sys.stdout.flush()
                         
                         reply = process_message(chat_id, text)
                         send_message(chat_id, reply)
@@ -95,6 +95,7 @@ def main():
             
         except Exception as e:
             print(f"❌ Main loop error: {e}")
+            sys.stdout.flush()
             time.sleep(5)
 
 if __name__ == "__main__":
@@ -105,4 +106,5 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"❌ Bot crashed: {e}")
             print("🔄 Restarting in 10 seconds...")
+            sys.stdout.flush()
             time.sleep(10) 
