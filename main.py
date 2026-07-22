@@ -1,7 +1,7 @@
-# ============================================
+ # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot - Complete
-# 🎯 FEATURES: Auto Login, Lottery, WinGo 1 Min, Scroll, Scrape, Pattern, Prediction
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot - Complete Flow
+# 🎯 FEATURES: Login -> Confirm -> Lottery -> WinGo 1 Min -> Scroll -> Scrape
 # ============================================
 
 import os
@@ -48,13 +48,13 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# 🤖 MAIN SCRAPER - Login + Lottery + WinGo 1 Min + Scroll + Scrape
+# 🤖 MAIN SCRAPER - Complete Flow
 # ============================================
 
 async def scrape_bdg_live():
     """
     🌐 BDG Game se data scrape karein
-    📌 Login -> Lottery -> WinGo 1 Min -> Scroll -> Table Scrape
+    📌 Login -> Confirm -> Lottery -> WinGo 1 Min -> Scroll -> Table Scrape
     """
     try:
         async with async_playwright() as p:
@@ -98,11 +98,43 @@ async def scrape_bdg_live():
                 await browser.close()
                 return None
             
-            await page.wait_for_timeout(10000)
+            await page.wait_for_timeout(5000)
             print("✅ Login successful!")
             
             # ============================================
-            # 2. LOTTERY PAR CLICK KAREIN
+            # 2. "Login Welcome" POP-UP - CONFIRM CLICK
+            # ============================================
+            print("🎯 Looking for Confirm button...")
+            
+            confirm_selectors = [
+                "button:has-text('Confirm')",
+                "button:has-text('confirm')",
+                "[class*='confirm']",
+                "button:has-text('OK')",
+                "button:has-text('ok')",
+                ".confirm-btn",
+                "button[class*='confirm']"
+            ]
+            
+            confirm_button = None
+            for selector in confirm_selectors:
+                try:
+                    confirm_button = await page.query_selector(selector)
+                    if confirm_button:
+                        print(f"✅ Confirm button found with selector: {selector}")
+                        break
+                except:
+                    continue
+            
+            if confirm_button:
+                await confirm_button.click()
+                print("✅ Confirm button clicked")
+                await page.wait_for_timeout(3000)
+            else:
+                print("⚠️ Confirm button not found! Continuing...")
+            
+            # ============================================
+            # 3. LOTTERY TAB CLICK
             # ============================================
             print("🎯 Looking for Lottery tab...")
             
@@ -112,13 +144,19 @@ async def scrape_bdg_live():
                 "div:has-text('Lottery')",
                 "button:has-text('Lottery')",
                 "[class*='lottery']",
-                "li:has-text('Lottery')"
+                "li:has-text('Lottery')",
+                "//a[contains(text(),'Lottery')]",
+                "//span[contains(text(),'Lottery')]",
+                "//div[contains(text(),'Lottery')]"
             ]
             
             lottery_tab = None
             for selector in lottery_selectors:
                 try:
-                    lottery_tab = await page.query_selector(selector)
+                    if selector.startswith("//"):
+                        lottery_tab = await page.locator(selector).first
+                    else:
+                        lottery_tab = await page.query_selector(selector)
                     if lottery_tab:
                         print(f"✅ Lottery tab found with selector: {selector}")
                         break
@@ -132,9 +170,10 @@ async def scrape_bdg_live():
             else:
                 print("⚠️ Lottery tab not found! Trying URL directly...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+                await page.wait_for_timeout(3000)
             
             # ============================================
-            # 3. SIRF "WinGo 1 Min" SELECT KAREIN (30sec NAHI!)
+            # 4. WIN GO 1 MIN SELECT
             # ============================================
             print("🎯 Looking for WinGo 1 Min...")
             
@@ -142,15 +181,21 @@ async def scrape_bdg_live():
                 "a:has-text('WinGo 1 Min')",
                 "span:has-text('WinGo 1 Min')",
                 "div:has-text('WinGo 1 Min')",
-                "[class*='WinGo']:has-text('1 Min')",
+                "button:has-text('WinGo 1 Min')",
                 "li:has-text('WinGo 1 Min')",
-                "button:has-text('WinGo 1 Min')"
+                "[class*='WinGo']:has-text('1 Min')",
+                "//a[contains(text(),'WinGo 1 Min')]",
+                "//span[contains(text(),'WinGo 1 Min')]",
+                "//div[contains(text(),'WinGo 1 Min')]"
             ]
             
             wingo_tab = None
             for selector in wingo_selectors:
                 try:
-                    wingo_tab = await page.query_selector(selector)
+                    if selector.startswith("//"):
+                        wingo_tab = await page.locator(selector).first
+                    else:
+                        wingo_tab = await page.query_selector(selector)
                     if wingo_tab:
                         print(f"✅ WinGo 1 Min found with selector: {selector}")
                         break
@@ -167,21 +212,21 @@ async def scrape_bdg_live():
                 await page.wait_for_timeout(5000)
             
             # ============================================
-            # 4. SCROLL DOWN
+            # 5. SCROLL DOWN
             # ============================================
             print("📜 Scrolling down...")
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(3000)
             
             # 📸 Screenshot
-            await page.screenshot(path="wingo_1min_page.png")
-            print("📸 Screenshot saved: wingo_1min_page.png")
+            await page.screenshot(path="wingo_page.png")
+            print("📸 Screenshot saved: wingo_page.png")
             
             # ============================================
-            # 5. TABLE SCRAPE
+            # 6. TABLE SCRAPE
             # ============================================
             print("📊 Looking for table...")
-            selectors = [
+            table_selectors = [
                 "table",
                 "table tbody",
                 ".game-history table",
@@ -193,7 +238,7 @@ async def scrape_bdg_live():
             ]
             
             table = None
-            for selector in selectors:
+            for selector in table_selectors:
                 try:
                     table = await page.query_selector(selector)
                     if table:
@@ -231,7 +276,6 @@ async def scrape_bdg_live():
                         number = await cols[1].text_content()
                         size = await cols[3].text_content()
                         
-                        # Color nikaalna
                         color_value = "unknown"
                         color_elem = await cols[2].query_selector("span, div, i")
                         if color_elem:
@@ -655,4 +699,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main() 
+    main()
