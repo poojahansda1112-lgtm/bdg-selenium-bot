@@ -1,22 +1,13 @@
- FROM python:3.10-slim
-
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    curl \
-    unzip \
-    xvfb \
-    libxi6 \
-    libgconf-2-4 \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install playwright
-RUN playwright install chromium
-RUN playwright install-deps
+ # Fast build with Playwright official image (Chromium pre-installed)
+FROM mcr.microsoft.com/playwright/python:v1.45.0-focal
 
 WORKDIR /app
-COPY . .
 
+# Copy requirements first for caching
+COPY requirements.txt .
 RUN pip install -r requirements.txt
+
+# Copy the rest
+COPY . .
 
 CMD ["python", "main.py"]
