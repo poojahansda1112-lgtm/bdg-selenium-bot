@@ -1,0 +1,15 @@
+# Data files (sensitive)
+bdg_data.json
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
