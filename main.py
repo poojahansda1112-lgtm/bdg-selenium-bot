@@ -1,13 +1,14 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot
-# 🎯 FEATURES: Login, Confirm (element-based), Lottery (partial match), WinGo 1 Min (partial match), Scrape, Commands
+# 🎯 FEATURES: Login, Confirm, Lottery, WinGo 1 Min, Scrape, Commands
 # ============================================
 
 import os
 import json
 import logging
 import asyncio
+import random
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
@@ -46,8 +47,18 @@ def get_color_emoji(color):
 async def scrape_bdg_live():
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+            # Random User-Agent
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            
+            browser = await p.chromium.launch(
+                headless=True,
+                args=['--disable-blink-features=AutomationControlled']
+            )
+            context = await browser.new_context(
+                user_agent=user_agent,
+                viewport={'width': 1280, 'height': 720}
+            )
+            page = await context.new_page()
 
             USERNAME = os.environ.get("BDG_USERNAME")
             PASSWORD = os.environ.get("BDG_PASSWORD")
@@ -59,7 +70,7 @@ async def scrape_bdg_live():
             # ---------- LOGIN ----------
             print("🌐 Going to login page...")
             await page.goto("https://7bdg.com/#/login", timeout=60000)
-            await page.wait_for_timeout(5000)
+            await page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
             print("📝 Filling username...")
             username_input = await page.query_selector("#username") or await page.query_selector("input[type='text']")
@@ -87,7 +98,7 @@ async def scrape_bdg_live():
                 await browser.close()
                 return None
 
-            await page.wait_for_timeout(5000)
+            await page.wait_for_timeout(5000 + random.randint(1000, 3000))
             print("✅ Login successful!")
 
             # ============================================
@@ -96,7 +107,7 @@ async def scrape_bdg_live():
             print("🎯 Looking for Confirm button (element-based)...")
             confirm_clicked = False
 
-            # Approach 1: XPath contains (any element containing "Confirm")
+            # Approach 1: XPath contains
             try:
                 xpath = "//*[contains(text(),'Confirm') or contains(text(),'confirm')]"
                 element = await page.locator(xpath).first
@@ -136,7 +147,7 @@ async def scrape_bdg_live():
                 except:
                     pass
 
-            # Approach 4: CSS selectors (specific elements)
+            # Approach 4: CSS selectors
             if not confirm_clicked:
                 selectors = [
                     "button:has-text('Confirm')",
@@ -160,7 +171,7 @@ async def scrape_bdg_live():
                         continue
 
             if confirm_clicked:
-                await page.wait_for_timeout(3000)
+                await page.wait_for_timeout(3000 + random.randint(500, 1500))
             else:
                 print("ℹ️ No Confirm found - Skipping")
 
@@ -210,7 +221,7 @@ async def scrape_bdg_live():
                 except:
                     pass
 
-            # Approach 4: Parent element (if direct click fails)
+            # Approach 4: Parent element
             if not lottery_clicked:
                 try:
                     element = await page.locator("text=Lottery").first
@@ -227,12 +238,12 @@ async def scrape_bdg_live():
             if not lottery_clicked:
                 print("⚠️ Lottery not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
-                await page.wait_for_timeout(3000)
+                await page.wait_for_timeout(3000 + random.randint(500, 1500))
                 lottery_clicked = True
                 print("✅ Navigated directly to WinGo page")
 
             if lottery_clicked:
-                await page.wait_for_timeout(3000)
+                await page.wait_for_timeout(3000 + random.randint(500, 1500))
 
             # ============================================
             # WIN GO 1 MIN (Partial match)
@@ -316,24 +327,29 @@ async def scrape_bdg_live():
             if not wingo_clicked:
                 print("⚠️ WinGo 1 Min not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
-                await page.wait_for_timeout(5000)
+                await page.wait_for_timeout(5000 + random.randint(1000, 3000))
                 wingo_clicked = True
                 print("✅ Navigated directly to WinGo page")
 
             if wingo_clicked:
-                await page.wait_for_timeout(5000)
+                await page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
             # ---------- SCROLL ----------
             print("📜 Scrolling down...")
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await page.wait_for_timeout(3000)
+            await page.wait_for_timeout(3000 + random.randint(500, 1500))
 
             # ---------- TABLE SCRAPE ----------
             print("📊 Looking for table...")
             table_selectors = [
-                "table", "table tbody", ".game-history table",
-                ".history-table", "[class*='history'] table",
-                "div[class*='table']", ".ant-table", ".MuiTable-root"
+                "table",
+                "table tbody",
+                ".game-history table",
+                ".history-table",
+                "[class*='history'] table",
+                "div[class*='table']",
+                ".ant-table",
+                ".MuiTable-root"
             ]
             table = None
             for sel in table_selectors:
@@ -689,4 +705,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main() 
+    main()
