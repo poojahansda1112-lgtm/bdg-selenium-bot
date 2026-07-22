@@ -1,6 +1,6 @@
- # ============================================
+# ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG Auto Scrape + Data Store Bot
+# 📝 DESCRIPTION: BDG WinGo Scrape + Data Store Bot
 # 🎯 FEATURES: Auto Scrape, Manual Add, Pattern, Prediction, Colors, Game Link
 # ============================================
 
@@ -51,81 +51,90 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# 🤖 PLAYWRIGHT SCRAPER - Multiple URLs
+# 🤖 PLAYWRIGHT SCRAPER - WinGo 1M URL
 # ============================================
 
 async def scrape_bdg_live():
     """
-    🌐 BDG Game se live data scrape karein
-    📌 Multiple URLs try karega
+    🌐 BDG Game WinGo page se live data scrape karein
+    📌 Exact URL: WinGo 1Min
     """
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             
-            # ⭐ Updated Working URLs
-            urls = [
-                "https://7bdg.com",        # ✅ Working
-                "https://bdgtop.net",      # ✅ Working
-                "https://bdg6.cc",         # ⏳ Backup
-                "https://bdg7.cc",         # ⏳ Backup
-                "https://bdg7963.com",
-                "https://bdg5840.com",
-                "https://bdgarchery.com"
-            ]
+            # ✅ Exact WinGo URL (Aapne diya hua)
+            url = "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"
             
-            data = None
-            current_period = "N/A"
+            print(f"🌐 Trying URL: {url}")
+            await page.goto(url, timeout=30000)
             
-            for url in urls:
-                try:
-                    print(f"🌐 Trying URL: {url}")
-                    await page.goto(url, timeout=15000)
-                    await page.wait_for_timeout(3000)
-                    
-                    # Check if page loaded
-                    period_element = await page.query_selector(".period-number")
-                    if period_element:
-                        current_period = await period_element.text_content() or "N/A"
-                        print(f"✅ Period found: {current_period}")
-                    
-                    # Table se data nikaalna
-                    rows = await page.query_selector_all("table tbody tr")
-                    if rows and len(rows) > 0:
-                        print(f"✅ Found {len(rows)} rows")
-                        data = []
-                        for row in rows[:20]:
-                            cols = await row.query_selector_all("td")
-                            if len(cols) >= 4:
-                                period = await cols[0].text_content()
-                                number = await cols[1].text_content()
-                                color = await cols[2].text_content()
-                                size = await cols[3].text_content()
-                                
-                                data.append({
-                                    "period": period.strip(),
-                                    "number": int(number.strip()),
-                                    "color": color.strip().lower(),
-                                    "size": size.strip().lower(),
-                                    "timestamp": str(datetime.now())
-                                })
-                        break
-                    else:
-                        print(f"⚠️ No rows found on {url}")
-                except Exception as e:
-                    print(f"❌ URL failed: {url} - {e}")
-                    continue
+            # ⏳ Wait for page to load completely
+            await page.wait_for_timeout(5000)
+            
+            # 📊 Table selector - Game history table
+            table = await page.query_selector("table")
+            if not table:
+                print("❌ Table not found on page")
+                await browser.close()
+                return None
+            
+            # 📊 Rows extract karein
+            rows = await table.query_selector_all("tbody tr")
+            
+            if not rows or len(rows) == 0:
+                print("⚠️ No rows found in table")
+                await browser.close()
+                return None
+            
+            print(f"✅ Found {len(rows)} rows")
+            
+            data = []
+            for row in rows[:20]:  # Sirf last 20 entries
+                cols = await row.query_selector_all("td")
+                if len(cols) >= 4:
+                    try:
+                        period = await cols[0].text_content()
+                        number = await cols[1].text_content()
+                        color_elem = await cols[2].query_selector("span") or await cols[2].query_selector("div")
+                        size = await cols[3].text_content()
+                        
+                        # 🎨 Color extract karein (class se)
+                        color_value = "unknown"
+                        if color_elem:
+                            class_name = await color_elem.get_attribute("class") or ""
+                            if "green" in class_name.lower():
+                                color_value = "green"
+                            elif "red" in class_name.lower():
+                                color_value = "red"
+                            elif "violet" in class_name.lower() or "purple" in class_name.lower():
+                                color_value = "violet"
+                        
+                        if period and number:
+                            data.append({
+                                "period": period.strip(),
+                                "number": int(number.strip()),
+                                "color": color_value,
+                                "size": size.strip().lower() if size else "unknown",
+                                "timestamp": str(datetime.now())
+                            })
+                    except Exception as e:
+                        print(f"⚠️ Row parsing error: {e}")
+                        continue
             
             await browser.close()
             
             if data:
                 print(f"✅ Scraped {len(data)} records")
                 return {
-                    "current_period": current_period.strip(),
+                    "current_period": data[0]['period'] if data else "N/A",
                     "history": data
                 }
-            return None
+            else:
+                print("❌ No data scraped")
+                return None
+                
     except Exception as e:
         logging.error(f"❌ Scrape error: {e}")
         return None
@@ -455,7 +464,7 @@ async def reset_data(update, context):
 async def start(update, context):
     """🚀 /start command with game link"""
     keyboard = [
-        [InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://7bdg.com"})],
+        [InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"})],
         [InlineKeyboardButton("📥 Scrape & Fetch", callback_data="fetch")],
         [InlineKeyboardButton("📊 Stats", callback_data="stats")],
         [InlineKeyboardButton("🔮 Prediction", callback_data="predict")]
@@ -466,7 +475,7 @@ async def start(update, context):
     total = len(data)
     
     await update.message.reply_text(
-        f"🎯 **BDG Auto Scrape + Data Store Bot**\n\n"
+        f"🎯 **BDG WinGo Scrape Bot**\n\n"
         f"📦 Total Records: {total}\n\n"
         f"**Commands:**\n"
         f"/add <color> <number> <size> - Single entry\n"
@@ -597,7 +606,7 @@ def main():
     app.add_handler(CommandHandler("reset", reset_data))
     app.add_handler(CallbackQueryHandler(button_callback))
     
-    print("✅ BDG Auto Scrape Bot is running...")
+    print("✅ BDG WinGo Scrape Bot is running...")
     
     loop = asyncio.get_event_loop()
     loop.create_task(auto_fetch())
@@ -605,4 +614,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main() 
