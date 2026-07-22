@@ -1,7 +1,8 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot - Table Fix
-# 🎯 FEATURES: Auto Scrape, Manual Add, Pattern, Prediction, Colors
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot - With Login
+# 🎯 FEATURES: Auto Login, Scrape, Pattern, Prediction
+# ⏰ Waiting Time: 1 Minute (60 seconds)
 # ============================================
 
 import os
@@ -48,80 +49,98 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# 🤖 SMART SCRAPER - Multiple Selectors
+# 🤖 SMART SCRAPER - 60 Seconds Timeout
 # ============================================
 
 async def scrape_bdg_live():
     """
     🌐 BDG Game WinGo page se live data scrape karein
-    📌 Multiple selectors try karega
+    📌 Railway variables se login karega
+    ⏰ 60 seconds timeout for page load
     """
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             
-            # ✅ Exact URL
-            url = "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"
+            # 🔐 Railway variables se username/password lein
+            USERNAME = os.environ.get("BDG_USERNAME")
+            PASSWORD = os.environ.get("BDG_PASSWORD")
             
-            print(f"🌐 Trying URL: {url}")
+            if not USERNAME or not PASSWORD:
+                print("❌ Username/Password not set in Railway variables!")
+                await browser.close()
+                return None
             
-            # 📄 Page load
-            await page.goto(url, timeout=30000)
+            # 📄 1. Login page par jaayein - 60 seconds timeout
+            print("🌐 Going to login page...")
+            await page.goto("https://7bdg.com/#/login", timeout=60000)
+            await page.wait_for_timeout(5000)
             
-            # ⏳ Wait for JavaScript to render
-            await page.wait_for_timeout(8000)
+            # 📝 2. Username daalein
+            print("📝 Filling username...")
+            username_input = await page.query_selector("#username") or await page.query_selector("input[type='text']") or await page.query_selector("input[name='username']")
+            if username_input:
+                await username_input.fill(USERNAME)
+                print(f"✅ Username filled: {USERNAME}")
+            else:
+                print("⚠️ Username field not found!")
             
-            # 📸 Debug: Page screenshot
-            await page.screenshot(path="page_load.png")
-            print("📸 Page screenshot saved")
+            # 🔑 3. Password daalein
+            print("🔑 Filling password...")
+            password_input = await page.query_selector("#password") or await page.query_selector("input[type='password']") or await page.query_selector("input[name='password']")
+            if password_input:
+                await password_input.fill(PASSWORD)
+                print("✅ Password filled")
+            else:
+                print("⚠️ Password field not found!")
             
-            # 📊 Multiple selectors try karein
+            # 🖱️ 4. Login button click karein
+            print("🖱️ Clicking login button...")
+            login_button = await page.query_selector("#login-button") or await page.query_selector("button[type='submit']") or await page.query_selector("button:has-text('Login')") or await page.query_selector("button:has-text('Sign In')")
+            if login_button:
+                await login_button.click()
+                print("✅ Login button clicked")
+            else:
+                print("⚠️ Login button not found!")
+            
+            # ⏳ 5. Redirect hone ka wait karein - 10 seconds
+            print("⏳ Waiting for login to complete...")
+            await page.wait_for_timeout(10000)
+            
+            # 🌐 6. WinGo page par jaayein - 60 seconds timeout
+            print("🌐 Going to WinGo page...")
+            await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+            await page.wait_for_timeout(10000)
+            
+            # 📊 7. Table dhoondhein
+            print("📊 Looking for table...")
             selectors = [
                 "table",
                 "table tbody",
                 ".game-history table",
                 ".history-table",
-                "[class*='history'] table",
-                ".MuiTable-root",
+                "div[class*='history'] table",
                 ".ant-table",
-                ".table-striped",
-                "div[class*='table'] table",
-                "div[class*='history'] table"
+                ".MuiTable-root"
             ]
             
             table = None
-            used_selector = None
-            
             for selector in selectors:
                 try:
                     table = await page.query_selector(selector)
                     if table:
-                        used_selector = selector
                         print(f"✅ Table found with selector: {selector}")
                         break
-                except Exception as e:
-                    print(f"⚠️ Selector failed: {selector} - {e}")
+                except:
                     continue
             
             if not table:
-                print("❌ Table not found with any selector")
-                
-                # 📄 Print page title and URL for debugging
-                title = await page.title()
-                print(f"📄 Page title: {title}")
-                print(f"🌐 Current URL: {page.url}")
-                
-                # 📸 Save full page HTML for debugging
-                html = await page.content()
-                with open("page_debug.html", "w", encoding="utf-8") as f:
-                    f.write(html)
-                print("📄 HTML saved to page_debug.html")
-                
+                print("❌ Table not found after login")
                 await browser.close()
                 return None
             
-            # 📊 Rows extract karein
+            # 📊 8. Rows extract karein
             rows = await table.query_selector_all("tbody tr")
             if not rows:
                 rows = await table.query_selector_all("tr")
@@ -140,34 +159,18 @@ async def scrape_bdg_live():
                     try:
                         period = await cols[0].text_content()
                         number = await cols[1].text_content()
-                        color_elem = await cols[2].query_selector("span") or await cols[2].query_selector("div") or await cols[2].query_selector("i")
+                        color_elem = await cols[2].query_selector("span") or await cols[2].query_selector("div")
                         size = await cols[3].text_content()
                         
-                        # 🎨 Color extract
                         color_value = "unknown"
                         if color_elem:
                             class_name = await color_elem.get_attribute("class") or ""
-                            style = await color_elem.get_attribute("style") or ""
-                            combined = (class_name + style).lower()
-                            
-                            if "green" in combined or "#00ff00" in combined or "#008000" in combined:
+                            if "green" in class_name.lower():
                                 color_value = "green"
-                            elif "red" in combined or "#ff0000" in combined or "#ff4444" in combined:
+                            elif "red" in class_name.lower():
                                 color_value = "red"
-                            elif "violet" in combined or "purple" in combined or "#800080" in combined:
+                            elif "violet" in class_name.lower() or "purple" in class_name.lower():
                                 color_value = "violet"
-                        
-                        # Color text content se bhi try karein
-                        if color_value == "unknown":
-                            color_text = await cols[2].text_content()
-                            if color_text:
-                                color_text = color_text.strip().lower()
-                                if "green" in color_text:
-                                    color_value = "green"
-                                elif "red" in color_text:
-                                    color_value = "red"
-                                elif "violet" in color_text or "purple" in color_text:
-                                    color_value = "violet"
                         
                         if period and number:
                             data.append({
