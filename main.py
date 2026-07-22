@@ -1,8 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot - With Login
-# 🎯 FEATURES: Auto Login, Scrape, Pattern, Prediction
-# ⏰ Waiting Time: 60 seconds
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot - Complete
+# 🎯 FEATURES: Auto Login, Lottery, WinGo 1 Min, Scroll, Scrape, Pattern, Prediction
 # ============================================
 
 import os
@@ -49,107 +48,146 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# 🤖 SMART SCRAPER - With Login Button Fix
+# 🤖 MAIN SCRAPER - Login + Lottery + WinGo 1 Min + Scroll + Scrape
 # ============================================
 
 async def scrape_bdg_live():
     """
-    🌐 BDG Game WinGo page se live data scrape karein
-    📌 Railway variables se login karega
+    🌐 BDG Game se data scrape karein
+    📌 Login -> Lottery -> WinGo 1 Min -> Scroll -> Table Scrape
     """
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             
-            # 🔐 Railway variables se username/password lein
             USERNAME = os.environ.get("BDG_USERNAME")
             PASSWORD = os.environ.get("BDG_PASSWORD")
             
             if not USERNAME or not PASSWORD:
-                print("❌ Username/Password not set in Railway variables!")
+                print("❌ Username/Password not set!")
                 await browser.close()
                 return None
             
-            # 📄 1. Login page par jaayein
+            # ============================================
+            # 1. LOGIN
+            # ============================================
             print("🌐 Going to login page...")
             await page.goto("https://7bdg.com/#/login", timeout=60000)
             await page.wait_for_timeout(5000)
             
-            # 📸 Debug screenshot
-            await page.screenshot(path="login_page.png")
-            print("📸 Login page screenshot saved")
-            
-            # 📝 2. Username daalein
             print("📝 Filling username...")
-            username_input = await page.query_selector("#username") or await page.query_selector("input[type='text']") or await page.query_selector("input[name='username']")
+            username_input = await page.query_selector("#username") or await page.query_selector("input[type='text']")
             if username_input:
                 await username_input.fill(USERNAME)
                 print(f"✅ Username filled: {USERNAME}")
-            else:
-                print("⚠️ Username field not found!")
-                await page.screenshot(path="no_username_field.png")
             
-            # 🔑 3. Password daalein
             print("🔑 Filling password...")
-            password_input = await page.query_selector("#password") or await page.query_selector("input[type='password']") or await page.query_selector("input[name='password']")
+            password_input = await page.query_selector("#password") or await page.query_selector("input[type='password']")
             if password_input:
                 await password_input.fill(PASSWORD)
                 print("✅ Password filled")
-            else:
-                print("⚠️ Password field not found!")
             
-            # 🖱️ 4. Login button click karein - MULTIPLE SELECTORS
-            print("🖱️ Looking for login button...")
-            
-            # Try multiple selectors
-            selectors = [
-                "#login-button",
-                "button[type='submit']",
-                "button:has-text('Login')",
-                "button:has-text('Sign In')",
-                ".login-btn",
-                "[class*='login']",
-                "button"
-            ]
-            
-            login_button = None
-            for selector in selectors:
-                try:
-                    login_button = await page.query_selector(selector)
-                    if login_button:
-                        print(f"✅ Login button found with selector: {selector}")
-                        break
-                except:
-                    continue
-            
+            print("🖱️ Clicking login button...")
+            login_button = await page.query_selector("#login-button") or await page.query_selector("button[type='submit']") or await page.query_selector("[class*='login']")
             if login_button:
                 await login_button.click()
                 print("✅ Login button clicked")
             else:
-                print("⚠️ Login button not found with any selector!")
-                await page.screenshot(path="no_login_button.png")
-                print("📸 Screenshot saved: no_login_button.png")
+                print("⚠️ Login button not found!")
                 await browser.close()
                 return None
             
-            # ⏳ 5. Redirect hone ka wait karein
-            print("⏳ Waiting for login to complete...")
             await page.wait_for_timeout(10000)
+            print("✅ Login successful!")
             
-            # 🌐 6. WinGo page par jaayein
-            print("🌐 Going to WinGo page...")
-            await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
-            await page.wait_for_timeout(10000)
+            # ============================================
+            # 2. LOTTERY PAR CLICK KAREIN
+            # ============================================
+            print("🎯 Looking for Lottery tab...")
             
-            # 📊 7. Table dhoondhein
+            lottery_selectors = [
+                "a:has-text('Lottery')",
+                "span:has-text('Lottery')",
+                "div:has-text('Lottery')",
+                "button:has-text('Lottery')",
+                "[class*='lottery']",
+                "li:has-text('Lottery')"
+            ]
+            
+            lottery_tab = None
+            for selector in lottery_selectors:
+                try:
+                    lottery_tab = await page.query_selector(selector)
+                    if lottery_tab:
+                        print(f"✅ Lottery tab found with selector: {selector}")
+                        break
+                except:
+                    continue
+            
+            if lottery_tab:
+                await lottery_tab.click()
+                print("✅ Lottery tab clicked")
+                await page.wait_for_timeout(3000)
+            else:
+                print("⚠️ Lottery tab not found! Trying URL directly...")
+                await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+            
+            # ============================================
+            # 3. SIRF "WinGo 1 Min" SELECT KAREIN (30sec NAHI!)
+            # ============================================
+            print("🎯 Looking for WinGo 1 Min...")
+            
+            wingo_selectors = [
+                "a:has-text('WinGo 1 Min')",
+                "span:has-text('WinGo 1 Min')",
+                "div:has-text('WinGo 1 Min')",
+                "[class*='WinGo']:has-text('1 Min')",
+                "li:has-text('WinGo 1 Min')",
+                "button:has-text('WinGo 1 Min')"
+            ]
+            
+            wingo_tab = None
+            for selector in wingo_selectors:
+                try:
+                    wingo_tab = await page.query_selector(selector)
+                    if wingo_tab:
+                        print(f"✅ WinGo 1 Min found with selector: {selector}")
+                        break
+                except:
+                    continue
+            
+            if wingo_tab:
+                await wingo_tab.click()
+                print("✅ WinGo 1 Min clicked")
+                await page.wait_for_timeout(5000)
+            else:
+                print("⚠️ WinGo 1 Min not found! Trying fallback...")
+                await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+                await page.wait_for_timeout(5000)
+            
+            # ============================================
+            # 4. SCROLL DOWN
+            # ============================================
+            print("📜 Scrolling down...")
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(3000)
+            
+            # 📸 Screenshot
+            await page.screenshot(path="wingo_1min_page.png")
+            print("📸 Screenshot saved: wingo_1min_page.png")
+            
+            # ============================================
+            # 5. TABLE SCRAPE
+            # ============================================
             print("📊 Looking for table...")
             selectors = [
                 "table",
                 "table tbody",
                 ".game-history table",
                 ".history-table",
-                "div[class*='history'] table",
+                "[class*='history'] table",
+                "div[class*='table']",
                 ".ant-table",
                 ".MuiTable-root"
             ]
@@ -165,18 +203,20 @@ async def scrape_bdg_live():
                     continue
             
             if not table:
-                print("❌ Table not found after login")
-                await page.screenshot(path="no_table.png")
+                print("❌ Table not found!")
+                content = await page.content()
+                with open("debug.html", "w", encoding="utf-8") as f:
+                    f.write(content)
+                print("📄 HTML saved to debug.html")
                 await browser.close()
                 return None
             
-            # 📊 8. Rows extract karein
             rows = await table.query_selector_all("tbody tr")
             if not rows:
                 rows = await table.query_selector_all("tr")
             
-            if not rows or len(rows) == 0:
-                print("⚠️ No rows found in table")
+            if not rows:
+                print("⚠️ No rows found!")
                 await browser.close()
                 return None
             
@@ -189,17 +229,20 @@ async def scrape_bdg_live():
                     try:
                         period = await cols[0].text_content()
                         number = await cols[1].text_content()
-                        color_elem = await cols[2].query_selector("span") or await cols[2].query_selector("div")
                         size = await cols[3].text_content()
                         
+                        # Color nikaalna
                         color_value = "unknown"
+                        color_elem = await cols[2].query_selector("span, div, i")
                         if color_elem:
                             class_name = await color_elem.get_attribute("class") or ""
-                            if "green" in class_name.lower():
+                            style = await color_elem.get_attribute("style") or ""
+                            combined = (class_name + style).lower()
+                            if "green" in combined:
                                 color_value = "green"
-                            elif "red" in class_name.lower():
+                            elif "red" in combined:
                                 color_value = "red"
-                            elif "violet" in class_name.lower() or "purple" in class_name.lower():
+                            elif "violet" in combined or "purple" in combined:
                                 color_value = "violet"
                         
                         if period and number:
@@ -211,17 +254,14 @@ async def scrape_bdg_live():
                                 "timestamp": str(datetime.now())
                             })
                     except Exception as e:
-                        print(f"⚠️ Row parsing error: {e}")
+                        print(f"⚠️ Row error: {e}")
                         continue
             
             await browser.close()
             
             if data:
                 print(f"✅ Scraped {len(data)} records")
-                return {
-                    "current_period": data[0]['period'] if data else "N/A",
-                    "history": data
-                }
+                return {"current_period": data[0]['period'], "history": data}
             else:
                 print("❌ No data scraped")
                 return None
