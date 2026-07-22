@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot - Complete Flow
-# 🎯 FEATURES: Login -> Confirm -> Lottery -> WinGo 1 Min -> Scroll -> Scrape
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot
+# 🎯 FEATURES: Login, Confirm, Lottery, WinGo 1 Min, Scroll, Scrape
 # ============================================
 
 import os
@@ -13,11 +13,10 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from playwright.async_api import async_playwright
 
-# 📊 Logging
 logging.basicConfig(level=logging.INFO)
 
 # ============================================
-# 📁 DATA STORE
+# DATA STORE
 # ============================================
 
 DATA_FILE = "bdg_data.json"
@@ -33,63 +32,53 @@ def save_data(data):
         json.dump(data, f, indent=2)
 
 # ============================================
-# 🎨 COLOR CODES
+# COLOR CODES
 # ============================================
 
-COLORS = {
-    "red": "🔴",
-    "green": "🟢",
-    "violet": "🟣",
-    "big": "📈",
-    "small": "📉"
-}
-
+COLORS = {"red": "🔴", "green": "🟢", "violet": "🟣", "big": "📈", "small": "📉"}
 def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# 🤖 MAIN SCRAPER - Complete Flow
+# MAIN SCRAPER
 # ============================================
 
 async def scrape_bdg_live():
-    """
-    🌐 BDG Game se data scrape karein
-    📌 Login -> Confirm -> Lottery -> WinGo 1 Min -> Scroll -> Table Scrape
-    """
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
-            
+
             USERNAME = os.environ.get("BDG_USERNAME")
             PASSWORD = os.environ.get("BDG_PASSWORD")
-            
             if not USERNAME or not PASSWORD:
                 print("❌ Username/Password not set!")
                 await browser.close()
                 return None
-            
-            # ============================================
-            # 1. LOGIN
-            # ============================================
+
+            # ---------- LOGIN ----------
             print("🌐 Going to login page...")
             await page.goto("https://7bdg.com/#/login", timeout=60000)
             await page.wait_for_timeout(5000)
-            
+
             print("📝 Filling username...")
             username_input = await page.query_selector("#username") or await page.query_selector("input[type='text']")
             if username_input:
                 await username_input.fill(USERNAME)
                 print(f"✅ Username filled: {USERNAME}")
-            
+
             print("🔑 Filling password...")
             password_input = await page.query_selector("#password") or await page.query_selector("input[type='password']")
             if password_input:
                 await password_input.fill(PASSWORD)
                 print("✅ Password filled")
-            
+
             print("🖱️ Clicking login button...")
-            login_button = await page.query_selector("#login-button") or await page.query_selector("button[type='submit']") or await page.query_selector("[class*='login']")
+            login_button = (
+                await page.query_selector("#login-button") or
+                await page.query_selector("button[type='submit']") or
+                await page.query_selector("[class*='login']")
+            )
             if login_button:
                 await login_button.click()
                 print("✅ Login button clicked")
@@ -97,30 +86,17 @@ async def scrape_bdg_live():
                 print("⚠️ Login button not found!")
                 await browser.close()
                 return None
-            
+
             await page.wait_for_timeout(5000)
             print("✅ Login successful!")
-            
-            # ============================================
-            # 2. "Login Welcome" POP-UP - CONFIRM CLICK
-            # ============================================
+
+            # ---------- CONFIRM POPUP (if exists) ----------
             print("🎯 Looking for Confirm button...")
-            
             confirm_selectors = [
-                "button:has-text('Confirm')",
-                "button:has-text('confirm')",
-                "button:has-text('OK')",
-                "button:has-text('ok')",
-                "[class*='confirm']",
-                "[class*='Confirm']",
-                ".confirm-btn",
-                "button[class*='confirm']",
-                "button[class*='Confirm']",
-                "//button[contains(text(),'Confirm')]",
-                "//button[contains(text(),'confirm')]",
-                "//button[contains(text(),'OK')]"
+                "button:has-text('Confirm')", "button:has-text('confirm')",
+                "button:has-text('OK')", "[class*='confirm']", ".confirm-btn",
+                "//button[contains(text(),'Confirm')]"
             ]
-            
             confirm_button = None
             for selector in confirm_selectors:
                 try:
@@ -129,151 +105,159 @@ async def scrape_bdg_live():
                     else:
                         confirm_button = await page.query_selector(selector)
                     if confirm_button:
-                        print(f"✅ Confirm button found with selector: {selector}")
+                        print(f"✅ Confirm found: {selector}")
                         break
                 except:
                     continue
-            
             if confirm_button:
                 await confirm_button.click()
-                print("✅ Confirm button clicked")
+                print("✅ Confirm clicked")
                 await page.wait_for_timeout(3000)
             else:
-                print("⚠️ Confirm button not found! Continuing...")
-            
-            # ============================================
-            # 3. LOTTERY TAB CLICK
-            # ============================================
+                print("ℹ️ No Confirm - skipping")
+
+            # ---------- LOTTERY TAB (multiple approaches) ----------
             print("🎯 Looking for Lottery tab...")
-            
-            lottery_selectors = [
-                "a:has-text('Lottery')",
-                "span:has-text('Lottery')",
-                "div:has-text('Lottery')",
-                "button:has-text('Lottery')",
-                "[class*='lottery']",
-                "[class*='Lottery']",
-                "li:has-text('Lottery')",
-                "//a[contains(text(),'Lottery')]",
-                "//span[contains(text(),'Lottery')]",
-                "//div[contains(text(),'Lottery')]",
-                "//*[contains(text(),'Lottery')]"
-            ]
-            
             lottery_tab = None
-            for selector in lottery_selectors:
+
+            # Approach 1: CSS
+            css_selectors = [
+                "a:has-text('Lottery')", "span:has-text('Lottery')",
+                "div:has-text('Lottery')", "button:has-text('Lottery')",
+                "li:has-text('Lottery')", "[class*='lottery']", "[class*='Lottery']"
+            ]
+            for sel in css_selectors:
                 try:
-                    if selector.startswith("//"):
-                        lottery_tab = await page.locator(selector).first
-                    else:
-                        lottery_tab = await page.query_selector(selector)
+                    lottery_tab = await page.query_selector(sel)
                     if lottery_tab:
-                        print(f"✅ Lottery tab found with selector: {selector}")
+                        print(f"✅ Lottery found: CSS {sel}")
                         break
                 except:
                     continue
-            
-            if lottery_tab:
+
+            # Approach 2: XPath
+            if not lottery_tab:
+                xpath_selectors = [
+                    "//*[contains(text(),'Lottery')]", "//span[contains(text(),'Lottery')]",
+                    "//div[contains(text(),'Lottery')]", "//a[contains(text(),'Lottery')]",
+                    "//li[contains(text(),'Lottery')]"
+                ]
+                for sel in xpath_selectors:
+                    try:
+                        lottery_tab = await page.locator(sel).first
+                        if lottery_tab:
+                            print(f"✅ Lottery found: XPath {sel}")
+                            break
+                    except:
+                        continue
+
+            # Approach 3: Parent element
+            if not lottery_tab:
+                try:
+                    elem = await page.locator("text=Lottery").first
+                    if elem:
+                        parent = await elem.locator("xpath=..")
+                        if parent:
+                            lottery_tab = parent
+                            print("✅ Lottery found via parent")
+                except:
+                    pass
+
+            # Approach 4: JavaScript click
+            if not lottery_tab:
+                try:
+                    await page.evaluate("""
+                        const elements = document.querySelectorAll('*');
+                        for (let el of elements) {
+                            if (el.textContent.trim() === 'Lottery') {
+                                el.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    """)
+                    await page.wait_for_timeout(2000)
+                    lottery_tab = True
+                    print("✅ Lottery clicked via JavaScript")
+                except:
+                    pass
+
+            if lottery_tab and lottery_tab != True:
                 await lottery_tab.click()
                 print("✅ Lottery tab clicked")
                 await page.wait_for_timeout(3000)
+            elif lottery_tab == True:
+                print("✅ Lottery already clicked")
             else:
-                print("⚠️ Lottery tab not found! Trying URL directly...")
+                print("⚠️ Lottery not found! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
                 await page.wait_for_timeout(3000)
-            
-            # ============================================
-            # 4. WIN GO 1 MIN SELECT
-            # ============================================
+
+            # ---------- WIN GO 1 MIN ----------
             print("🎯 Looking for WinGo 1 Min...")
-            
             wingo_selectors = [
-                "a:has-text('WinGo 1 Min')",
-                "span:has-text('WinGo 1 Min')",
-                "div:has-text('WinGo 1 Min')",
-                "button:has-text('WinGo 1 Min')",
-                "li:has-text('WinGo 1 Min')",
-                "[class*='WinGo']:has-text('1 Min')",
-                "//a[contains(text(),'WinGo 1 Min')]",
-                "//span[contains(text(),'WinGo 1 Min')]",
-                "//div[contains(text(),'WinGo 1 Min')]",
-                "//*[contains(text(),'WinGo') and contains(text(),'1 Min')]"
+                "a:has-text('WinGo 1 Min')", "span:has-text('WinGo 1 Min')",
+                "div:has-text('WinGo 1 Min')", "button:has-text('WinGo 1 Min')",
+                "li:has-text('WinGo 1 Min')", "[class*='WinGo']",
+                "//*[contains(text(),'WinGo 1 Min')]"
             ]
-            
             wingo_tab = None
-            for selector in wingo_selectors:
+            for sel in wingo_selectors:
                 try:
-                    if selector.startswith("//"):
-                        wingo_tab = await page.locator(selector).first
+                    if sel.startswith("//"):
+                        wingo_tab = await page.locator(sel).first
                     else:
-                        wingo_tab = await page.query_selector(selector)
+                        wingo_tab = await page.query_selector(sel)
                     if wingo_tab:
-                        print(f"✅ WinGo 1 Min found with selector: {selector}")
+                        print(f"✅ WinGo 1 Min found: {sel}")
                         break
                 except:
                     continue
-            
             if wingo_tab:
                 await wingo_tab.click()
                 print("✅ WinGo 1 Min clicked")
                 await page.wait_for_timeout(5000)
             else:
-                print("⚠️ WinGo 1 Min not found! Trying fallback...")
+                print("⚠️ WinGo 1 Min not found! Using fallback URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
                 await page.wait_for_timeout(5000)
-            
-            # ============================================
-            # 5. SCROLL DOWN
-            # ============================================
+
+            # ---------- SCROLL ----------
             print("📜 Scrolling down...")
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(3000)
-            
-            # ============================================
-            # 6. TABLE SCRAPE
-            # ============================================
+
+            # ---------- TABLE SCRAPE ----------
             print("📊 Looking for table...")
             table_selectors = [
-                "table",
-                "table tbody",
-                ".game-history table",
-                ".history-table",
-                "[class*='history'] table",
-                "div[class*='table']",
-                ".ant-table",
-                ".MuiTable-root"
+                "table", "table tbody", ".game-history table",
+                ".history-table", "[class*='history'] table",
+                "div[class*='table']", ".ant-table", ".MuiTable-root"
             ]
-            
             table = None
-            for selector in table_selectors:
+            for sel in table_selectors:
                 try:
-                    table = await page.query_selector(selector)
+                    table = await page.query_selector(sel)
                     if table:
-                        print(f"✅ Table found with selector: {selector}")
+                        print(f"✅ Table found: {sel}")
                         break
                 except:
                     continue
-            
+
             if not table:
                 print("❌ Table not found!")
-                content = await page.content()
-                with open("debug.html", "w", encoding="utf-8") as f:
-                    f.write(content)
-                print("📄 HTML saved to debug.html")
                 await browser.close()
                 return None
-            
+
             rows = await table.query_selector_all("tbody tr")
             if not rows:
                 rows = await table.query_selector_all("tr")
-            
             if not rows:
-                print("⚠️ No rows found!")
+                print("⚠️ No rows!")
                 await browser.close()
                 return None
-            
+
             print(f"✅ Found {len(rows)} rows")
-            
             data = []
             for row in rows[:20]:
                 cols = await row.query_selector_all("td")
@@ -282,7 +266,7 @@ async def scrape_bdg_live():
                         period = await cols[0].text_content()
                         number = await cols[1].text_content()
                         size = await cols[3].text_content()
-                        
+
                         color_value = "unknown"
                         color_elem = await cols[2].query_selector("span, div, i")
                         if color_elem:
@@ -295,7 +279,7 @@ async def scrape_bdg_live():
                                 color_value = "red"
                             elif "violet" in combined or "purple" in combined:
                                 color_value = "violet"
-                        
+
                         if period and number:
                             data.append({
                                 "period": period.strip(),
@@ -304,74 +288,53 @@ async def scrape_bdg_live():
                                 "size": size.strip().lower() if size else "unknown",
                                 "timestamp": str(datetime.now())
                             })
-                    except Exception as e:
-                        print(f"⚠️ Row error: {e}")
+                    except:
                         continue
-            
+
             await browser.close()
-            
             if data:
                 print(f"✅ Scraped {len(data)} records")
                 return {"current_period": data[0]['period'], "history": data}
             else:
                 print("❌ No data scraped")
                 return None
-                
+
     except Exception as e:
         logging.error(f"❌ Scrape error: {e}")
         return None
 
 # ============================================
-# 📝 COMMANDS
+# TELEGRAM COMMANDS
 # ============================================
 
 async def start(update, context):
-    """🚀 /start command"""
     keyboard = [
         [InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"})],
         [InlineKeyboardButton("📥 Scrape & Fetch", callback_data="fetch")],
         [InlineKeyboardButton("📊 Stats", callback_data="stats")],
         [InlineKeyboardButton("🔮 Prediction", callback_data="predict")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
     data = load_data()
     total = len(data)
-    
     await update.message.reply_text(
-        f"🎯 **BDG WinGo Scrape Bot**\n\n"
-        f"📦 Total Records: {total}\n\n"
-        f"**Commands:**\n"
-        f"/add <color> <number> <size> - Single entry\n"
-        f"/addbulk color num, ... - Bulk entry\n"
-        f"/fetch - Auto scrape from game\n"
-        f"/view - View last 10 records\n"
-        f"/pattern - Pattern analysis\n"
-        f"/predict - Prediction\n"
-        f"/stats - Statistics\n"
-        f"/reset - Delete all data\n\n"
-        f"📌 Example: /add green 7 big",
-        reply_markup=reply_markup
+        f"🎯 **BDG WinGo Scrape Bot**\n\n📦 Total Records: {total}\n\n"
+        f"**Commands:**\n/add <color> <number> <size>\n/addbulk color num, ...\n"
+        f"/fetch - Auto scrape\n/view - Last 10\n/pattern - Pattern\n/predict - Prediction\n"
+        f"/stats - Statistics\n/reset - Delete all\n\n📌 Example: /add green 7 big",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def add_result(update, context):
-    """📝 /add command"""
     try:
         if len(context.args) < 2:
-            await update.message.reply_text(
-                "❗ **Use:** /add <color> <number> <size>\n"
-                "📌 **Example:** /add green 7 big"
-            )
+            await update.message.reply_text("❗ Use: /add <color> <number> <size>")
             return
-        
         color = context.args[0].lower()
         number = int(context.args[1])
         size = context.args[2].lower() if len(context.args) > 2 else "unknown"
-        
-        if color not in ['red', 'green', 'violet']:
-            await update.message.reply_text("❗ Use: red, green, violet")
+        if color not in ['red','green','violet']:
+            await update.message.reply_text("❗ Colors: red, green, violet")
             return
-        
         data = load_data()
         data.append({
             "color": color,
@@ -381,36 +344,27 @@ async def add_result(update, context):
             "timestamp": str(datetime.now())
         })
         save_data(data)
-        
         emoji = get_color_emoji(color)
         size_emoji = "📈" if size == "big" else "📉" if size == "small" else ""
-        await update.message.reply_text(
-            f"{emoji} **Saved:** {color.upper()} {number} {size_emoji} ({size})\n"
-            f"📦 **Total:** {len(data)} records"
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
+        await update.message.reply_text(f"{emoji} **Saved:** {color.upper()} {number} {size_emoji} ({size})\n📦 Total: {len(data)}")
+    except:
+        await update.message.reply_text("❌ Error! Use: /add green 7 big")
 
 async def add_bulk(update, context):
-    """📊 /addbulk command"""
     try:
         text = ' '.join(context.args)
         entries = text.split(',')
-        
         data = load_data()
         count = 0
-        
         for entry in entries:
             entry = entry.strip()
-            if not entry:
-                continue
+            if not entry: continue
             parts = entry.split()
             if len(parts) >= 2:
                 color = parts[0].lower()
                 number = int(parts[1])
                 size = parts[2].lower() if len(parts) > 2 else "unknown"
-                
-                if color in ['red', 'green', 'violet']:
+                if color in ['red','green','violet']:
                     data.append({
                         "color": color,
                         "number": number,
@@ -419,98 +373,68 @@ async def add_bulk(update, context):
                         "timestamp": str(datetime.now())
                     })
                     count += 1
-        
         save_data(data)
-        await update.message.reply_text(
-            f"✅ {count} records saved!\n"
-            f"📦 Total: {len(data)} records"
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
+        await update.message.reply_text(f"✅ {count} records saved!\n📦 Total: {len(data)}")
+    except:
+        await update.message.reply_text("❌ Error! Use: /addbulk red 5 big, green 3 small")
 
 async def fetch_data(update, context):
-    """📡 /fetch command - Auto scrape from BDG Game"""
-    msg = await update.message.reply_text("📡 Scraping live data from BDG Game...")
-    
+    msg = await update.message.reply_text("📡 Scraping live data...")
     result = await scrape_bdg_live()
-    
     if not result:
-        await msg.edit_text("❌ Failed to scrape data. Please try again.")
+        await msg.edit_text("❌ Failed to scrape.")
         return
-    
     data = result['history']
     current_period = result['current_period']
-    
     if data:
         existing = load_data()
         existing_periods = {item.get('period') for item in existing}
-        
         new_count = 0
         for item in data:
             if item['period'] not in existing_periods:
                 existing.append(item)
                 new_count += 1
-        
         save_data(existing)
-        
-        await msg.edit_text(
-            f"✅ **Scraped Successfully!**\n"
-            f"📌 Live Period: {current_period}\n"
-            f"📊 New Records: {new_count}\n"
-            f"📦 Total Records: {len(existing)}"
-        )
+        await msg.edit_text(f"✅ **Scraped Successfully!**\n📌 Period: {current_period}\n📊 New: {new_count}\n📦 Total: {len(existing)}")
     else:
-        await msg.edit_text("❌ No data found on website.")
+        await msg.edit_text("❌ No data found.")
 
 async def view_data(update, context):
-    """📋 /view command"""
     data = load_data()
     if not data:
-        await update.message.reply_text("📭 No data yet.")
+        await update.message.reply_text("📭 No data.")
         return
-    
     last_10 = data[-10:] if len(data) >= 10 else data
     msg = "📊 **Last 10 Records:**\n\n"
     for idx, item in enumerate(last_10, 1):
         emoji = get_color_emoji(item['color'])
         size_emoji = "📈" if item.get('size') == 'big' else "📉" if item.get('size') == 'small' else ""
         msg += f"{idx}. {emoji} {item['color'].upper()} {item['number']} {size_emoji} ({item.get('size', 'N/A')})\n"
-    
     msg += f"\n📦 **Total:** {len(data)} records"
     await update.message.reply_text(msg)
 
 async def stats(update, context):
-    """📊 /stats command"""
     data = load_data()
     if not data:
-        await update.message.reply_text("📭 No data yet.")
+        await update.message.reply_text("📭 No data.")
         return
-    
     total = len(data)
     red = sum(1 for i in data if i['color'] == 'red')
     green = sum(1 for i in data if i['color'] == 'green')
     violet = sum(1 for i in data if i['color'] == 'violet')
-    
-    msg = f"""
-📊 **Full Statistics**
-
-📦 Total Records: {total}
-
-{get_color_emoji('red')} Red: {red} ({red/total*100:.1f}%)
-{get_color_emoji('green')} Green: {green} ({green/total*100:.1f}%)
-{get_color_emoji('violet')} Violet: {violet} ({violet/total*100:.1f}%)
-"""
-    await update.message.reply_text(msg)
+    await update.message.reply_text(
+        f"📊 **Full Statistics**\n\n📦 Total: {total}\n"
+        f"{get_color_emoji('red')} Red: {red} ({red/total*100:.1f}%)\n"
+        f"{get_color_emoji('green')} Green: {green} ({green/total*100:.1f}%)\n"
+        f"{get_color_emoji('violet')} Violet: {violet} ({violet/total*100:.1f}%)"
+    )
 
 async def pattern(update, context):
-    """🎯 /pattern command"""
     data = load_data()
     if len(data) < 5:
         await update.message.reply_text("⚠️ Need 5+ records.")
         return
-    
     last_50 = data[-50:] if len(data) >= 50 else data
-    
     color_count = {}
     number_count = {}
     for item in last_50:
@@ -518,7 +442,6 @@ async def pattern(update, context):
         num = item['number']
         color_count[color] = color_count.get(color, 0) + 1
         number_count[num] = number_count.get(num, 0) + 1
-    
     streak_color = last_50[-1]['color']
     streak_count = 1
     for i in range(len(last_50)-2, -1, -1):
@@ -526,79 +449,56 @@ async def pattern(update, context):
             streak_count += 1
         else:
             break
-    
     hot_color = max(color_count, key=color_count.get) if color_count else 'N/A'
     hot_number = max(number_count, key=number_count.get) if number_count else 0
-    
-    msg = f"""
-🎯 **Pattern Analysis**
-
-📊 Last 50 Distribution:
-{get_color_emoji('red')} Red: {color_count.get('red', 0)}
-{get_color_emoji('green')} Green: {color_count.get('green', 0)}
-{get_color_emoji('violet')} Violet: {color_count.get('violet', 0)}
-
-📈 Streak: {streak_count}x {streak_color.upper()}
-🔥 Hot Color: {hot_color.upper()} ({color_count.get(hot_color, 0)}x)
-🎯 Hot Number: {hot_number} ({number_count.get(hot_number, 0)}x)
-"""
-    await update.message.reply_text(msg)
+    await update.message.reply_text(
+        f"🎯 **Pattern Analysis**\n\n"
+        f"📊 Last 50 Distribution:\n{get_color_emoji('red')} Red: {color_count.get('red', 0)}\n"
+        f"{get_color_emoji('green')} Green: {color_count.get('green', 0)}\n"
+        f"{get_color_emoji('violet')} Violet: {color_count.get('violet', 0)}\n\n"
+        f"📈 Streak: {streak_count}x {streak_color.upper()}\n"
+        f"🔥 Hot Color: {hot_color.upper()} ({color_count.get(hot_color, 0)}x)\n"
+        f"🎯 Hot Number: {hot_number} ({number_count.get(hot_number, 0)}x)"
+    )
 
 async def predict(update, context):
-    """🔮 /predict command"""
     data = load_data()
     if len(data) < 5:
         await update.message.reply_text("⚠️ Need 5+ records.")
         return
-    
     last_100 = data[-100:] if len(data) >= 100 else data
     total = len(last_100)
-    
     red = sum(1 for i in last_100 if i['color'] == 'red')
     green = sum(1 for i in last_100 if i['color'] == 'green')
     violet = sum(1 for i in last_100 if i['color'] == 'violet')
-    
-    prob_red = (red / total) * 100
-    prob_green = (green / total) * 100
-    prob_violet = (violet / total) * 100
-    
-    probs = {'RED': prob_red, 'GREEN': prob_green, 'VIOLET': prob_violet}
+    probs = {
+        'RED': (red/total)*100,
+        'GREEN': (green/total)*100,
+        'VIOLET': (violet/total)*100
+    }
     best = max(probs, key=probs.get)
-    
-    msg = f"""
-🔮 **Prediction**
-
-{get_color_emoji(best.lower())} **Best Bet:** {best} ({probs[best]:.1f}%)
-
-📊 **Probability:**
-{get_color_emoji('red')} Red: {prob_red:.1f}%
-{get_color_emoji('green')} Green: {prob_green:.1f}%
-{get_color_emoji('violet')} Violet: {prob_violet:.1f}%
-
-📦 Based on {total} rounds
-⚠️ Not financial advice.
-"""
-    await update.message.reply_text(msg)
+    await update.message.reply_text(
+        f"🔮 **Prediction**\n\n{get_color_emoji(best.lower())} **Best Bet:** {best} ({probs[best]:.1f}%)\n\n"
+        f"📊 Probability:\n{get_color_emoji('red')} Red: {probs['RED']:.1f}%\n"
+        f"{get_color_emoji('green')} Green: {probs['GREEN']:.1f}%\n"
+        f"{get_color_emoji('violet')} Violet: {probs['VIOLET']:.1f}%\n\n"
+        f"📦 Based on {total} rounds\n⚠️ Not financial advice."
+    )
 
 async def reset_data(update, context):
-    """🗑️ /reset command"""
     data = load_data()
     if not data:
         await update.message.reply_text("📭 No data to delete.")
         return
-    
     save_data([])
     await update.message.reply_text(f"🗑️ {len(data)} records deleted!")
 
 async def button_callback(update, context):
-    """🔄 Button callbacks"""
     query = update.callback_query
     await query.answer()
-    
     if query.data == "fetch":
-        await query.edit_message_text("📡 Scraping live data...")
+        await query.edit_message_text("📡 Scraping...")
         result = await scrape_bdg_live()
-        
         if result and result['history']:
             existing = load_data()
             existing_periods = {item.get('period') for item in existing}
@@ -611,24 +511,18 @@ async def button_callback(update, context):
             await query.edit_message_text(f"✅ {count} new records saved!\n📦 Total: {len(existing)}")
         else:
             await query.edit_message_text("❌ No data scraped.")
-    
     elif query.data == "stats":
         data = load_data()
         if not data:
-            await query.edit_message_text("📭 No data yet.")
+            await query.edit_message_text("📭 No data.")
             return
         total = len(data)
         red = sum(1 for i in data if i['color'] == 'red')
         green = sum(1 for i in data if i['color'] == 'green')
         violet = sum(1 for i in data if i['color'] == 'violet')
         await query.edit_message_text(
-            f"📊 **Stats**\n"
-            f"📦 Total: {total}\n"
-            f"🔴 Red: {red} ({red/total*100:.1f}%)\n"
-            f"🟢 Green: {green} ({green/total*100:.1f}%)\n"
-            f"🟣 Violet: {violet} ({violet/total*100:.1f}%)"
+            f"📊 **Stats**\n📦 Total: {total}\n🔴 Red: {red} ({red/total*100:.1f}%)\n🟢 Green: {green} ({green/total*100:.1f}%)\n🟣 Violet: {violet} ({violet/total*100:.1f}%)"
         )
-    
     elif query.data == "predict":
         data = load_data()
         if len(data) < 5:
@@ -639,26 +533,17 @@ async def button_callback(update, context):
         red = sum(1 for i in last_100 if i['color'] == 'red')
         green = sum(1 for i in last_100 if i['color'] == 'green')
         violet = sum(1 for i in last_100 if i['color'] == 'violet')
-        probs = {
-            'RED': (red/total)*100,
-            'GREEN': (green/total)*100,
-            'VIOLET': (violet/total)*100
-        }
+        probs = {'RED': (red/total)*100, 'GREEN': (green/total)*100, 'VIOLET': (violet/total)*100}
         best = max(probs, key=probs.get)
         await query.edit_message_text(
-            f"🔮 **Prediction**\n"
-            f"🎯 Best: {best} ({probs[best]:.1f}%)\n"
-            f"🔴 Red: {probs['RED']:.1f}%\n"
-            f"🟢 Green: {probs['GREEN']:.1f}%\n"
-            f"🟣 Violet: {probs['VIOLET']:.1f}%"
+            f"🔮 **Prediction**\n🎯 Best: {best} ({probs[best]:.1f}%)\n🔴 Red: {probs['RED']:.1f}%\n🟢 Green: {probs['GREEN']:.1f}%\n🟣 Violet: {probs['VIOLET']:.1f}%"
         )
 
 # ============================================
-# ⏰ AUTO FETCH
+# AUTO FETCH
 # ============================================
 
 async def auto_fetch():
-    """⏰ Auto fetch every 30 seconds"""
     while True:
         try:
             result = await scrape_bdg_live()
@@ -678,7 +563,7 @@ async def auto_fetch():
         await asyncio.sleep(30)
 
 # ============================================
-# 🚀 MAIN
+# MAIN
 # ============================================
 
 def main():
@@ -686,9 +571,7 @@ def main():
     if not token:
         print("❌ BOT_TOKEN not set!")
         return
-    
     app = Application.builder().token(token).build()
-    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add_result))
     app.add_handler(CommandHandler("addbulk", add_bulk))
@@ -699,12 +582,9 @@ def main():
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("reset", reset_data))
     app.add_handler(CallbackQueryHandler(button_callback))
-    
     print("✅ BDG WinGo Scrape Bot is running...")
-    
     loop = asyncio.get_event_loop()
     loop.create_task(auto_fetch())
-    
     app.run_polling()
 
 if __name__ == "__main__":
