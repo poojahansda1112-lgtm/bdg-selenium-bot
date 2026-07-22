@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot (Final Version)
-# 🎯 FEATURES: Auto-login, Confirm, Lottery, WinGo 1 Min, Scrape, Anti-Detection
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot (Updated Selectors)
+# 🔗 GAME: WinGo 1 Minute
 # ============================================
 
 import os
@@ -41,13 +41,13 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# MAIN SCRAPER (with Anti-Detection & Random Delays)
+# MAIN SCRAPER (IMPROVED SELECTORS)
 # ============================================
 
 async def scrape_bdg_live():
     try:
         async with async_playwright() as p:
-            # Real User-Agent & Anti-Detection
+            # Anti-detection
             user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             browser = await p.chromium.launch(
                 headless=True,
@@ -100,7 +100,7 @@ async def scrape_bdg_live():
             await page.wait_for_timeout(5000 + random.randint(1000, 3000))
             print("✅ Login successful!")
 
-            # ---------- CONFIRM BUTTON (if popup exists) ----------
+            # ---------- CONFIRM POPUP ----------
             print("🎯 Looking for Confirm button...")
             confirm_clicked = False
 
@@ -146,47 +146,40 @@ async def scrape_bdg_live():
             else:
                 print("ℹ️ No Confirm - Skipping")
 
-            # ---------- LOTTERY TAB (partial match) ----------
+            # ---------- LOTTERY TAB (IMPROVED) ----------
             print("🎯 Looking for Lottery tab...")
             lottery_clicked = False
 
-            try:
-                xpath = "//*[contains(text(),'Lottery')]"
-                element = await page.locator(xpath).first
-                if element and await element.is_visible():
-                    await element.click()
-                    lottery_clicked = True
-                    print("✅ Lottery clicked via XPath")
-            except:
-                pass
+            # Selectors based on actual HTML (from screenshot)
+            lottery_selectors = [
+                "//*[contains(text(),'Lottery')]",
+                "//span[contains(text(),'Lottery')]",
+                "//div[contains(text(),'Lottery')]",
+                "//li[contains(text(),'Lottery')]",
+                "//a[contains(text(),'Lottery')]",
+                "span:has-text('Lottery')",
+                "div:has-text('Lottery')",
+                "li:has-text('Lottery')",
+                "a:has-text('Lottery')",
+                "[class*='lottery']",
+                "[class*='Lottery']"
+            ]
 
-            if not lottery_clicked:
+            for sel in lottery_selectors:
                 try:
-                    element = await page.locator(":has-text('Lottery')").first
-                    if element:
+                    if sel.startswith("//"):
+                        element = await page.locator(sel).first
+                    else:
+                        element = await page.query_selector(sel)
+                    if element and await element.is_visible():
                         await element.click()
                         lottery_clicked = True
-                        print("✅ Lottery clicked via :has-text")
+                        print(f"✅ Lottery clicked via selector: {sel}")
+                        break
                 except:
-                    pass
+                    continue
 
-            if not lottery_clicked:
-                try:
-                    await page.evaluate("""
-                        const elements = document.querySelectorAll('*');
-                        for (let el of elements) {
-                            if (el.textContent.includes('Lottery')) {
-                                el.click();
-                                return true;
-                            }
-                        }
-                        return false;
-                    """)
-                    lottery_clicked = True
-                    print("✅ Lottery clicked via JavaScript")
-                except:
-                    pass
-
+            # If still not clicked, try clicking parent container
             if not lottery_clicked:
                 try:
                     element = await page.locator("text=Lottery").first
@@ -195,10 +188,11 @@ async def scrape_bdg_live():
                         if parent:
                             await parent.click()
                             lottery_clicked = True
-                            print("✅ Lottery clicked via parent")
+                            print("✅ Lottery clicked via parent element")
                 except:
                     pass
 
+            # Fallback: direct navigation
             if not lottery_clicked:
                 print("⚠️ Lottery not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
@@ -208,65 +202,39 @@ async def scrape_bdg_live():
             if lottery_clicked:
                 await page.wait_for_timeout(3000 + random.randint(500, 1500))
 
-            # ---------- WIN GO 1 MIN (partial match) ----------
+            # ---------- WIN GO 1 MIN (IMPROVED) ----------
             print("🎯 Looking for WinGo 1 Min...")
             wingo_clicked = False
 
-            try:
-                xpath = "//*[contains(text(),'WinGo 1 Min')]"
-                element = await page.locator(xpath).first
-                if element and await element.is_visible():
-                    await element.click()
-                    wingo_clicked = True
-                    print("✅ WinGo 1 Min clicked via XPath")
-            except:
-                pass
+            # Exact text from screenshot: "Win Go 1Min" (with space between Win and Go)
+            wingo_selectors = [
+                "//*[contains(text(),'Win Go 1Min')]",
+                "//*[contains(text(),'WinGo 1Min')]",
+                "//*[contains(text(),'Win Go 1 Min')]",
+                "//*[contains(text(),'WinGo 1 Min')]",
+                "//*[contains(text(),'WinGo 1')]",
+                "span:has-text('Win Go 1Min')",
+                "div:has-text('Win Go 1Min')",
+                "a:has-text('Win Go 1Min')",
+                "li:has-text('Win Go 1Min')",
+                "[class*='WinGo']"
+            ]
 
-            if not wingo_clicked:
+            for sel in wingo_selectors:
                 try:
-                    element = await page.locator(":has-text('WinGo 1 Min')").first
-                    if element:
+                    if sel.startswith("//"):
+                        element = await page.locator(sel).first
+                    else:
+                        element = await page.query_selector(sel)
+                    if element and await element.is_visible():
                         await element.click()
                         wingo_clicked = True
-                        print("✅ WinGo 1 Min clicked via :has-text")
+                        print(f"✅ WinGo 1 Min clicked via selector: {sel}")
+                        break
                 except:
-                    pass
+                    continue
 
-            if not wingo_clicked:
-                try:
-                    await page.evaluate("""
-                        const elements = document.querySelectorAll('*');
-                        for (let el of elements) {
-                            if (el.textContent.includes('WinGo 1 Min')) {
-                                el.click();
-                                return true;
-                            }
-                        }
-                        return false;
-                    """)
-                    wingo_clicked = True
-                    print("✅ WinGo 1 Min clicked via JavaScript")
-                except:
-                    pass
-
-            if not wingo_clicked:
-                try:
-                    await page.evaluate("""
-                        const elements = document.querySelectorAll('*');
-                        for (let el of elements) {
-                            const text = el.textContent;
-                            if (text.includes('WinGo') && text.includes('1 Min')) {
-                                el.click();
-                                return true;
-                            }
-                        }
-                        return false;
-                    """)
-                    wingo_clicked = True
-                    print("✅ WinGo 1 Min clicked via combined match")
-                except:
-                    pass
-
+            # If not clicked, try direct navigation
             if not wingo_clicked:
                 print("⚠️ WinGo 1 Min not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
@@ -276,17 +244,45 @@ async def scrape_bdg_live():
             if wingo_clicked:
                 await page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
-            # ---------- SCROLL ----------
+            # ---------- DIRECT NAVIGATION (WinGo 1 Min) ----------
+            print("🌐 Navigating directly to WinGo 1 Min page...")
+            await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+            
+            # ⏰ Wait for JS to render
+            print("⏳ Waiting for page to load...")
+            await page.wait_for_timeout(10000)  # 10 seconds
+            
+            # 🔍 Debug info
+            title = await page.title()
+            url = page.url
+            print(f"📄 Page title: {title}")
+            print(f"🌐 Final URL: {url}")
+
+            # Wait for table to appear (critical)
+            try:
+                await page.wait_for_selector("table", timeout=30000)
+                print("✅ Table appeared after wait")
+            except:
+                print("⚠️ Table did not appear within 30 seconds")
+
+            # 📜 SCROLL DOWN
             print("📜 Scrolling down...")
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(3000 + random.randint(500, 1500))
 
-            # ---------- TABLE SCRAPE ----------
+            # 📊 TABLE SCRAPE (enhanced selectors)
             print("📊 Looking for table...")
             table_selectors = [
-                "table", "table tbody", ".game-history table",
-                ".history-table", "[class*='history'] table",
-                "div[class*='table']", ".ant-table", ".MuiTable-root"
+                "table",
+                "table tbody",
+                ".game-history table",
+                ".history-table",
+                "[class*='history'] table",
+                "div[class*='table']",
+                ".ant-table",
+                ".MuiTable-root",
+                "div[class*='game-history']",
+                "div[role='table']"
             ]
             table = None
             for sel in table_selectors:
@@ -300,6 +296,8 @@ async def scrape_bdg_live():
 
             if not table:
                 print("❌ Table not found!")
+                await page.screenshot(path="debug_table.png")
+                print("📸 Debug screenshot saved")
                 await browser.close()
                 return None
 
@@ -357,8 +355,9 @@ async def scrape_bdg_live():
         logging.error(f"❌ Scrape error: {e}")
         return None
 
+
 # ============================================
-# TELEGRAM COMMANDS
+# TELEGRAM COMMANDS (unchanged)
 # ============================================
 
 async def start(update, context):
