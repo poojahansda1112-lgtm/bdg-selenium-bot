@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot
-# 🎯 FEATURES: Login, Confirm, Lottery, WinGo 1 Min, Scroll, Scrape
+# 🎯 FEATURES: Login, Confirm (element-based), Lottery (partial match), WinGo 1 Min (partial match), Scrape, Commands
 # ============================================
 
 import os
@@ -90,136 +90,237 @@ async def scrape_bdg_live():
             await page.wait_for_timeout(5000)
             print("✅ Login successful!")
 
-            # ---------- CONFIRM POPUP (if exists) ----------
-            print("🎯 Looking for Confirm button...")
-            confirm_selectors = [
-                "button:has-text('Confirm')", "button:has-text('confirm')",
-                "button:has-text('OK')", "[class*='confirm']", ".confirm-btn",
-                "//button[contains(text(),'Confirm')]"
-            ]
-            confirm_button = None
-            for selector in confirm_selectors:
+            # ============================================
+            # CONFIRM BUTTON (Element-based)
+            # ============================================
+            print("🎯 Looking for Confirm button (element-based)...")
+            confirm_clicked = False
+
+            # Approach 1: XPath contains (any element containing "Confirm")
+            try:
+                xpath = "//*[contains(text(),'Confirm') or contains(text(),'confirm')]"
+                element = await page.locator(xpath).first
+                if element and await element.is_visible():
+                    await element.click()
+                    confirm_clicked = True
+                    print("✅ Confirm clicked via XPath contains")
+            except:
+                pass
+
+            # Approach 2: CSS :has-text
+            if not confirm_clicked:
                 try:
-                    if selector.startswith("//"):
-                        confirm_button = await page.locator(selector).first
-                    else:
-                        confirm_button = await page.query_selector(selector)
-                    if confirm_button:
-                        print(f"✅ Confirm found: {selector}")
-                        break
-                except:
-                    continue
-            if confirm_button:
-                await confirm_button.click()
-                print("✅ Confirm clicked")
-                await page.wait_for_timeout(3000)
-            else:
-                print("ℹ️ No Confirm - skipping")
-
-            # ---------- LOTTERY TAB (multiple approaches) ----------
-            print("🎯 Looking for Lottery tab...")
-            lottery_tab = None
-
-            # Approach 1: CSS
-            css_selectors = [
-                "a:has-text('Lottery')", "span:has-text('Lottery')",
-                "div:has-text('Lottery')", "button:has-text('Lottery')",
-                "li:has-text('Lottery')", "[class*='lottery']", "[class*='Lottery']"
-            ]
-            for sel in css_selectors:
-                try:
-                    lottery_tab = await page.query_selector(sel)
-                    if lottery_tab:
-                        print(f"✅ Lottery found: CSS {sel}")
-                        break
-                except:
-                    continue
-
-            # Approach 2: XPath
-            if not lottery_tab:
-                xpath_selectors = [
-                    "//*[contains(text(),'Lottery')]", "//span[contains(text(),'Lottery')]",
-                    "//div[contains(text(),'Lottery')]", "//a[contains(text(),'Lottery')]",
-                    "//li[contains(text(),'Lottery')]"
-                ]
-                for sel in xpath_selectors:
-                    try:
-                        lottery_tab = await page.locator(sel).first
-                        if lottery_tab:
-                            print(f"✅ Lottery found: XPath {sel}")
-                            break
-                    except:
-                        continue
-
-            # Approach 3: Parent element
-            if not lottery_tab:
-                try:
-                    elem = await page.locator("text=Lottery").first
-                    if elem:
-                        parent = await elem.locator("xpath=..")
-                        if parent:
-                            lottery_tab = parent
-                            print("✅ Lottery found via parent")
+                    element = await page.locator(":has-text('Confirm')").first
+                    if element:
+                        await element.click()
+                        confirm_clicked = True
+                        print("✅ Confirm clicked via :has-text")
                 except:
                     pass
 
-            # Approach 4: JavaScript click
-            if not lottery_tab:
+            # Approach 3: JavaScript includes
+            if not confirm_clicked:
                 try:
                     await page.evaluate("""
                         const elements = document.querySelectorAll('*');
                         for (let el of elements) {
-                            if (el.textContent.trim() === 'Lottery') {
+                            if (el.textContent.includes('Confirm')) {
                                 el.click();
                                 return true;
                             }
                         }
                         return false;
                     """)
-                    await page.wait_for_timeout(2000)
-                    lottery_tab = True
-                    print("✅ Lottery clicked via JavaScript")
+                    confirm_clicked = True
+                    print("✅ Confirm clicked via JavaScript")
                 except:
                     pass
 
-            if lottery_tab and lottery_tab != True:
-                await lottery_tab.click()
-                print("✅ Lottery tab clicked")
+            # Approach 4: CSS selectors (specific elements)
+            if not confirm_clicked:
+                selectors = [
+                    "button:has-text('Confirm')",
+                    "button:has-text('confirm')",
+                    "button:has-text('OK')",
+                    "[class*='confirm']",
+                    "[class*='Confirm']",
+                    ".confirm-btn",
+                    "button[class*='confirm']",
+                    "button[class*='Confirm']"
+                ]
+                for sel in selectors:
+                    try:
+                        element = await page.query_selector(sel)
+                        if element:
+                            await element.click()
+                            confirm_clicked = True
+                            print(f"✅ Confirm clicked via CSS: {sel}")
+                            break
+                    except:
+                        continue
+
+            if confirm_clicked:
                 await page.wait_for_timeout(3000)
-            elif lottery_tab == True:
-                print("✅ Lottery already clicked")
             else:
-                print("⚠️ Lottery not found! Using direct URL...")
+                print("ℹ️ No Confirm found - Skipping")
+
+            # ============================================
+            # LOTTERY TAB (Partial match)
+            # ============================================
+            print("🎯 Looking for Lottery tab (partial match)...")
+            lottery_clicked = False
+
+            # Approach 1: XPath contains
+            try:
+                xpath = "//*[contains(text(),'Lottery')]"
+                element = await page.locator(xpath).first
+                if element and await element.is_visible():
+                    await element.click()
+                    lottery_clicked = True
+                    print("✅ Lottery clicked via XPath contains")
+            except:
+                pass
+
+            # Approach 2: CSS :has-text
+            if not lottery_clicked:
+                try:
+                    element = await page.locator(":has-text('Lottery')").first
+                    if element:
+                        await element.click()
+                        lottery_clicked = True
+                        print("✅ Lottery clicked via :has-text")
+                except:
+                    pass
+
+            # Approach 3: JavaScript includes
+            if not lottery_clicked:
+                try:
+                    await page.evaluate("""
+                        const elements = document.querySelectorAll('*');
+                        for (let el of elements) {
+                            if (el.textContent.includes('Lottery')) {
+                                el.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    """)
+                    lottery_clicked = True
+                    print("✅ Lottery clicked via JavaScript includes")
+                except:
+                    pass
+
+            # Approach 4: Parent element (if direct click fails)
+            if not lottery_clicked:
+                try:
+                    element = await page.locator("text=Lottery").first
+                    if element:
+                        parent = await element.locator("xpath=..")
+                        if parent:
+                            await parent.click()
+                            lottery_clicked = True
+                            print("✅ Lottery clicked via parent element")
+                except:
+                    pass
+
+            # Fallback: Direct URL
+            if not lottery_clicked:
+                print("⚠️ Lottery not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+                await page.wait_for_timeout(3000)
+                lottery_clicked = True
+                print("✅ Navigated directly to WinGo page")
+
+            if lottery_clicked:
                 await page.wait_for_timeout(3000)
 
-            # ---------- WIN GO 1 MIN ----------
-            print("🎯 Looking for WinGo 1 Min...")
-            wingo_selectors = [
-                "a:has-text('WinGo 1 Min')", "span:has-text('WinGo 1 Min')",
-                "div:has-text('WinGo 1 Min')", "button:has-text('WinGo 1 Min')",
-                "li:has-text('WinGo 1 Min')", "[class*='WinGo']",
-                "//*[contains(text(),'WinGo 1 Min')]"
-            ]
-            wingo_tab = None
-            for sel in wingo_selectors:
+            # ============================================
+            # WIN GO 1 MIN (Partial match)
+            # ============================================
+            print("🎯 Looking for WinGo 1 Min (partial match)...")
+            wingo_clicked = False
+
+            # Approach 1: XPath contains
+            try:
+                xpath = "//*[contains(text(),'WinGo 1 Min')]"
+                element = await page.locator(xpath).first
+                if element and await element.is_visible():
+                    await element.click()
+                    wingo_clicked = True
+                    print("✅ WinGo 1 Min clicked via XPath contains")
+            except:
+                pass
+
+            # Approach 2: CSS :has-text
+            if not wingo_clicked:
                 try:
-                    if sel.startswith("//"):
-                        wingo_tab = await page.locator(sel).first
-                    else:
-                        wingo_tab = await page.query_selector(sel)
-                    if wingo_tab:
-                        print(f"✅ WinGo 1 Min found: {sel}")
-                        break
+                    element = await page.locator(":has-text('WinGo 1 Min')").first
+                    if element:
+                        await element.click()
+                        wingo_clicked = True
+                        print("✅ WinGo 1 Min clicked via :has-text")
                 except:
-                    continue
-            if wingo_tab:
-                await wingo_tab.click()
-                print("✅ WinGo 1 Min clicked")
-                await page.wait_for_timeout(5000)
-            else:
-                print("⚠️ WinGo 1 Min not found! Using fallback URL...")
+                    pass
+
+            # Approach 3: JavaScript includes
+            if not wingo_clicked:
+                try:
+                    await page.evaluate("""
+                        const elements = document.querySelectorAll('*');
+                        for (let el of elements) {
+                            if (el.textContent.includes('WinGo 1 Min')) {
+                                el.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    """)
+                    wingo_clicked = True
+                    print("✅ WinGo 1 Min clicked via JavaScript includes")
+                except:
+                    pass
+
+            # Approach 4: Combined match (WinGo + 1 Min)
+            if not wingo_clicked:
+                try:
+                    await page.evaluate("""
+                        const elements = document.querySelectorAll('*');
+                        for (let el of elements) {
+                            const text = el.textContent;
+                            if (text.includes('WinGo') && text.includes('1 Min')) {
+                                el.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    """)
+                    wingo_clicked = True
+                    print("✅ WinGo 1 Min clicked via combined match")
+                except:
+                    pass
+
+            # Approach 5: Parent element
+            if not wingo_clicked:
+                try:
+                    element = await page.locator("text=WinGo 1 Min").first
+                    if element:
+                        parent = await element.locator("xpath=..")
+                        if parent:
+                            await parent.click()
+                            wingo_clicked = True
+                            print("✅ WinGo 1 Min clicked via parent element")
+                except:
+                    pass
+
+            # Fallback: Direct URL
+            if not wingo_clicked:
+                print("⚠️ WinGo 1 Min not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+                await page.wait_for_timeout(5000)
+                wingo_clicked = True
+                print("✅ Navigated directly to WinGo page")
+
+            if wingo_clicked:
                 await page.wait_for_timeout(5000)
 
             # ---------- SCROLL ----------
