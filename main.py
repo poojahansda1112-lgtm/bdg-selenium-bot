@@ -2,7 +2,7 @@
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot - With Login
 # 🎯 FEATURES: Auto Login, Scrape, Pattern, Prediction
-# ⏰ Waiting Time: 1 Minute (60 seconds)
+# ⏰ Waiting Time: 60 seconds
 # ============================================
 
 import os
@@ -49,14 +49,13 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# 🤖 SMART SCRAPER - 60 Seconds Timeout
+# 🤖 SMART SCRAPER - With Login Button Fix
 # ============================================
 
 async def scrape_bdg_live():
     """
     🌐 BDG Game WinGo page se live data scrape karein
     📌 Railway variables se login karega
-    ⏰ 60 seconds timeout for page load
     """
     try:
         async with async_playwright() as p:
@@ -72,10 +71,14 @@ async def scrape_bdg_live():
                 await browser.close()
                 return None
             
-            # 📄 1. Login page par jaayein - 60 seconds timeout
+            # 📄 1. Login page par jaayein
             print("🌐 Going to login page...")
             await page.goto("https://7bdg.com/#/login", timeout=60000)
             await page.wait_for_timeout(5000)
+            
+            # 📸 Debug screenshot
+            await page.screenshot(path="login_page.png")
+            print("📸 Login page screenshot saved")
             
             # 📝 2. Username daalein
             print("📝 Filling username...")
@@ -85,6 +88,7 @@ async def scrape_bdg_live():
                 print(f"✅ Username filled: {USERNAME}")
             else:
                 print("⚠️ Username field not found!")
+                await page.screenshot(path="no_username_field.png")
             
             # 🔑 3. Password daalein
             print("🔑 Filling password...")
@@ -95,20 +99,45 @@ async def scrape_bdg_live():
             else:
                 print("⚠️ Password field not found!")
             
-            # 🖱️ 4. Login button click karein
-            print("🖱️ Clicking login button...")
-            login_button = await page.query_selector("#login-button") or await page.query_selector("button[type='submit']") or await page.query_selector("button:has-text('Login')") or await page.query_selector("button:has-text('Sign In')")
+            # 🖱️ 4. Login button click karein - MULTIPLE SELECTORS
+            print("🖱️ Looking for login button...")
+            
+            # Try multiple selectors
+            selectors = [
+                "#login-button",
+                "button[type='submit']",
+                "button:has-text('Login')",
+                "button:has-text('Sign In')",
+                ".login-btn",
+                "[class*='login']",
+                "button"
+            ]
+            
+            login_button = None
+            for selector in selectors:
+                try:
+                    login_button = await page.query_selector(selector)
+                    if login_button:
+                        print(f"✅ Login button found with selector: {selector}")
+                        break
+                except:
+                    continue
+            
             if login_button:
                 await login_button.click()
                 print("✅ Login button clicked")
             else:
-                print("⚠️ Login button not found!")
+                print("⚠️ Login button not found with any selector!")
+                await page.screenshot(path="no_login_button.png")
+                print("📸 Screenshot saved: no_login_button.png")
+                await browser.close()
+                return None
             
-            # ⏳ 5. Redirect hone ka wait karein - 10 seconds
+            # ⏳ 5. Redirect hone ka wait karein
             print("⏳ Waiting for login to complete...")
             await page.wait_for_timeout(10000)
             
-            # 🌐 6. WinGo page par jaayein - 60 seconds timeout
+            # 🌐 6. WinGo page par jaayein
             print("🌐 Going to WinGo page...")
             await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
             await page.wait_for_timeout(10000)
@@ -137,6 +166,7 @@ async def scrape_bdg_live():
             
             if not table:
                 print("❌ Table not found after login")
+                await page.screenshot(path="no_table.png")
                 await browser.close()
                 return None
             
@@ -585,4 +615,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main() 
