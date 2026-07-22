@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot - Complete Flow
-# 🎯 FEATURES: Login -> Confirm -> Lottery -> WinGo 1 Min -> Scroll -> Scrape -> Screenshot
+# 🎯 FEATURES: Login -> Confirm -> Lottery -> WinGo 1 Min -> Scroll -> Scrape
 # ============================================
 
 import os
@@ -101,10 +101,6 @@ async def scrape_bdg_live():
             await page.wait_for_timeout(5000)
             print("✅ Login successful!")
             
-            # 📸 Screenshot after login
-            await page.screenshot(path="login_success.png")
-            print("📸 Login success screenshot saved")
-            
             # ============================================
             # 2. "Login Welcome" POP-UP - CONFIRM CLICK
             # ============================================
@@ -113,17 +109,25 @@ async def scrape_bdg_live():
             confirm_selectors = [
                 "button:has-text('Confirm')",
                 "button:has-text('confirm')",
-                "[class*='confirm']",
                 "button:has-text('OK')",
                 "button:has-text('ok')",
+                "[class*='confirm']",
+                "[class*='Confirm']",
                 ".confirm-btn",
-                "button[class*='confirm']"
+                "button[class*='confirm']",
+                "button[class*='Confirm']",
+                "//button[contains(text(),'Confirm')]",
+                "//button[contains(text(),'confirm')]",
+                "//button[contains(text(),'OK')]"
             ]
             
             confirm_button = None
             for selector in confirm_selectors:
                 try:
-                    confirm_button = await page.query_selector(selector)
+                    if selector.startswith("//"):
+                        confirm_button = await page.locator(selector).first
+                    else:
+                        confirm_button = await page.query_selector(selector)
                     if confirm_button:
                         print(f"✅ Confirm button found with selector: {selector}")
                         break
@@ -148,10 +152,12 @@ async def scrape_bdg_live():
                 "div:has-text('Lottery')",
                 "button:has-text('Lottery')",
                 "[class*='lottery']",
+                "[class*='Lottery']",
                 "li:has-text('Lottery')",
                 "//a[contains(text(),'Lottery')]",
                 "//span[contains(text(),'Lottery')]",
-                "//div[contains(text(),'Lottery')]"
+                "//div[contains(text(),'Lottery')]",
+                "//*[contains(text(),'Lottery')]"
             ]
             
             lottery_tab = None
@@ -190,7 +196,8 @@ async def scrape_bdg_live():
                 "[class*='WinGo']:has-text('1 Min')",
                 "//a[contains(text(),'WinGo 1 Min')]",
                 "//span[contains(text(),'WinGo 1 Min')]",
-                "//div[contains(text(),'WinGo 1 Min')]"
+                "//div[contains(text(),'WinGo 1 Min')]",
+                "//*[contains(text(),'WinGo') and contains(text(),'1 Min')]"
             ]
             
             wingo_tab = None
@@ -221,10 +228,6 @@ async def scrape_bdg_live():
             print("📜 Scrolling down...")
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(3000)
-            
-            # 📸 Screenshot (Final page)
-            await page.screenshot(path="wingo_page.png")
-            print("📸 Screenshot saved: wingo_page.png")
             
             # ============================================
             # 6. TABLE SCRAPE
@@ -426,22 +429,10 @@ async def add_bulk(update, context):
         await update.message.reply_text(f"❌ Error: {e}")
 
 async def fetch_data(update, context):
-    """📡 /fetch command - Auto scrape from BDG Game + Screenshot"""
+    """📡 /fetch command - Auto scrape from BDG Game"""
     msg = await update.message.reply_text("📡 Scraping live data from BDG Game...")
     
     result = await scrape_bdg_live()
-    
-    # 📸 Screenshot bhejein (chahe data mile ya nahi)
-    try:
-        with open("wingo_page.png", "rb") as f:
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=f,
-                caption="📸 Screenshot of WinGo page"
-            )
-            print("📸 Screenshot sent to Telegram")
-    except Exception as e:
-        print(f"⚠️ Screenshot not found: {e}")
     
     if not result:
         await msg.edit_text("❌ Failed to scrape data. Please try again.")
@@ -608,17 +599,6 @@ async def button_callback(update, context):
         await query.edit_message_text("📡 Scraping live data...")
         result = await scrape_bdg_live()
         
-        # 📸 Screenshot bhejein
-        try:
-            with open("wingo_page.png", "rb") as f:
-                await context.bot.send_photo(
-                    chat_id=update.effective_chat.id,
-                    photo=f,
-                    caption="📸 Screenshot of WinGo page"
-                )
-        except:
-            pass
-        
         if result and result['history']:
             existing = load_data()
             existing_periods = {item.get('period') for item in existing}
@@ -728,4 +708,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main() 
