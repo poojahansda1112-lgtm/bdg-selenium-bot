@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape + Data Store Bot
-# 🎯 FEATURES: Auto Scrape, Manual Add, Pattern, Prediction, Colors, Game Link
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot - Table Fix
+# 🎯 FEATURES: Auto Scrape, Manual Add, Pattern, Prediction, Colors
 # ============================================
 
 import os
@@ -17,20 +17,18 @@ from playwright.async_api import async_playwright
 logging.basicConfig(level=logging.INFO)
 
 # ============================================
-# 📁 DATA STORE - JSON File
+# 📁 DATA STORE
 # ============================================
 
 DATA_FILE = "bdg_data.json"
 
 def load_data():
-    """📥 JSON file se data load karein"""
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
             return json.load(f)
     return []
 
 def save_data(data):
-    """📤 Data ko JSON file mein save karein"""
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -47,41 +45,86 @@ COLORS = {
 }
 
 def get_color_emoji(color):
-    """Color ke hisaab se emoji return karein"""
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# 🤖 PLAYWRIGHT SCRAPER - WinGo 1M URL
+# 🤖 SMART SCRAPER - Multiple Selectors
 # ============================================
 
 async def scrape_bdg_live():
     """
     🌐 BDG Game WinGo page se live data scrape karein
-    📌 Exact URL: WinGo 1Min
+    📌 Multiple selectors try karega
     """
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             
-            # ✅ Exact WinGo URL (Aapne diya hua)
+            # ✅ Exact URL
             url = "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"
             
             print(f"🌐 Trying URL: {url}")
+            
+            # 📄 Page load
             await page.goto(url, timeout=30000)
             
-            # ⏳ Wait for page to load completely
-            await page.wait_for_timeout(5000)
+            # ⏳ Wait for JavaScript to render
+            await page.wait_for_timeout(8000)
             
-            # 📊 Table selector - Game history table
-            table = await page.query_selector("table")
+            # 📸 Debug: Page screenshot
+            await page.screenshot(path="page_load.png")
+            print("📸 Page screenshot saved")
+            
+            # 📊 Multiple selectors try karein
+            selectors = [
+                "table",
+                "table tbody",
+                ".game-history table",
+                ".history-table",
+                "[class*='history'] table",
+                ".MuiTable-root",
+                ".ant-table",
+                ".table-striped",
+                "div[class*='table'] table",
+                "div[class*='history'] table"
+            ]
+            
+            table = None
+            used_selector = None
+            
+            for selector in selectors:
+                try:
+                    table = await page.query_selector(selector)
+                    if table:
+                        used_selector = selector
+                        print(f"✅ Table found with selector: {selector}")
+                        break
+                except Exception as e:
+                    print(f"⚠️ Selector failed: {selector} - {e}")
+                    continue
+            
             if not table:
-                print("❌ Table not found on page")
+                print("❌ Table not found with any selector")
+                
+                # 📄 Print page title and URL for debugging
+                title = await page.title()
+                print(f"📄 Page title: {title}")
+                print(f"🌐 Current URL: {page.url}")
+                
+                # 📸 Save full page HTML for debugging
+                html = await page.content()
+                with open("page_debug.html", "w", encoding="utf-8") as f:
+                    f.write(html)
+                print("📄 HTML saved to page_debug.html")
+                
                 await browser.close()
                 return None
             
             # 📊 Rows extract karein
             rows = await table.query_selector_all("tbody tr")
+            if not rows:
+                rows = await table.query_selector_all("tr")
             
             if not rows or len(rows) == 0:
                 print("⚠️ No rows found in table")
@@ -91,25 +134,40 @@ async def scrape_bdg_live():
             print(f"✅ Found {len(rows)} rows")
             
             data = []
-            for row in rows[:20]:  # Sirf last 20 entries
+            for row in rows[:20]:
                 cols = await row.query_selector_all("td")
                 if len(cols) >= 4:
                     try:
                         period = await cols[0].text_content()
                         number = await cols[1].text_content()
-                        color_elem = await cols[2].query_selector("span") or await cols[2].query_selector("div")
+                        color_elem = await cols[2].query_selector("span") or await cols[2].query_selector("div") or await cols[2].query_selector("i")
                         size = await cols[3].text_content()
                         
-                        # 🎨 Color extract karein (class se)
+                        # 🎨 Color extract
                         color_value = "unknown"
                         if color_elem:
                             class_name = await color_elem.get_attribute("class") or ""
-                            if "green" in class_name.lower():
+                            style = await color_elem.get_attribute("style") or ""
+                            combined = (class_name + style).lower()
+                            
+                            if "green" in combined or "#00ff00" in combined or "#008000" in combined:
                                 color_value = "green"
-                            elif "red" in class_name.lower():
+                            elif "red" in combined or "#ff0000" in combined or "#ff4444" in combined:
                                 color_value = "red"
-                            elif "violet" in class_name.lower() or "purple" in class_name.lower():
+                            elif "violet" in combined or "purple" in combined or "#800080" in combined:
                                 color_value = "violet"
+                        
+                        # Color text content se bhi try karein
+                        if color_value == "unknown":
+                            color_text = await cols[2].text_content()
+                            if color_text:
+                                color_text = color_text.strip().lower()
+                                if "green" in color_text:
+                                    color_value = "green"
+                                elif "red" in color_text:
+                                    color_value = "red"
+                                elif "violet" in color_text or "purple" in color_text:
+                                    color_value = "violet"
                         
                         if period and number:
                             data.append({
@@ -140,18 +198,45 @@ async def scrape_bdg_live():
         return None
 
 # ============================================
-# 📝 MANUAL DATA ENTRY
+# 📝 COMMANDS
 # ============================================
 
+async def start(update, context):
+    """🚀 /start command"""
+    keyboard = [
+        [InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"})],
+        [InlineKeyboardButton("📥 Scrape & Fetch", callback_data="fetch")],
+        [InlineKeyboardButton("📊 Stats", callback_data="stats")],
+        [InlineKeyboardButton("🔮 Prediction", callback_data="predict")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    data = load_data()
+    total = len(data)
+    
+    await update.message.reply_text(
+        f"🎯 **BDG WinGo Scrape Bot**\n\n"
+        f"📦 Total Records: {total}\n\n"
+        f"**Commands:**\n"
+        f"/add <color> <number> <size> - Single entry\n"
+        f"/addbulk color num, ... - Bulk entry\n"
+        f"/fetch - Auto scrape from game\n"
+        f"/view - View last 10 records\n"
+        f"/pattern - Pattern analysis\n"
+        f"/predict - Prediction\n"
+        f"/stats - Statistics\n"
+        f"/reset - Delete all data\n\n"
+        f"📌 Example: /add green 7 big",
+        reply_markup=reply_markup
+    )
+
 async def add_result(update, context):
-    """📝 /add command - Manual data store with colors"""
+    """📝 /add command"""
     try:
         if len(context.args) < 2:
             await update.message.reply_text(
                 "❗ **Use:** /add <color> <number> <size>\n"
-                "📌 **Example:** /add green 7 big\n\n"
-                "🟢 **Colors:** red, green, violet\n"
-                "📊 **Size:** big, small (optional)"
+                "📌 **Example:** /add green 7 big"
             )
             return
         
@@ -179,17 +264,11 @@ async def add_result(update, context):
             f"{emoji} **Saved:** {color.upper()} {number} {size_emoji} ({size})\n"
             f"📦 **Total:** {len(data)} records"
         )
-    except ValueError:
-        await update.message.reply_text("❗ Number invalid hai. Use: /add green 7 big")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
-# ============================================
-# 📊 BULK DATA ENTRY
-# ============================================
-
 async def add_bulk(update, context):
-    """📊 /addbulk command - Multiple records ek saath"""
+    """📊 /addbulk command"""
     try:
         text = ' '.join(context.args)
         entries = text.split(',')
@@ -225,12 +304,8 @@ async def add_bulk(update, context):
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
-# ============================================
-# 📥 AUTO FETCH COMMAND
-# ============================================
-
 async def fetch_data(update, context):
-    """📡 /fetch command - Auto scrape from BDG Game"""
+    """📡 /fetch command"""
     msg = await update.message.reply_text("📡 Scraping live data from BDG Game...")
     
     result = await scrape_bdg_live()
@@ -257,21 +332,16 @@ async def fetch_data(update, context):
             f"✅ **Scraped Successfully!**\n"
             f"📌 Live Period: {current_period}\n"
             f"📊 New Records: {new_count}\n"
-            f"📦 Total Records: {len(existing)}\n\n"
-            f"💡 Use /view to see data"
+            f"📦 Total Records: {len(existing)}"
         )
     else:
         await msg.edit_text("❌ No data found on website.")
 
-# ============================================
-# 📋 VIEW DATA with COLORS
-# ============================================
-
 async def view_data(update, context):
-    """📋 /view command - Last 10 records with colors"""
+    """📋 /view command"""
     data = load_data()
     if not data:
-        await update.message.reply_text("📭 No data yet. Use /add or /fetch")
+        await update.message.reply_text("📭 No data yet.")
         return
     
     last_10 = data[-10:] if len(data) >= 10 else data
@@ -284,12 +354,8 @@ async def view_data(update, context):
     msg += f"\n📦 **Total:** {len(data)} records"
     await update.message.reply_text(msg)
 
-# ============================================
-# 📊 STATISTICS with COLORS
-# ============================================
-
 async def stats(update, context):
-    """📊 /stats command - Full statistics with colors"""
+    """📊 /stats command"""
     data = load_data()
     if not data:
         await update.message.reply_text("📭 No data yet.")
@@ -300,24 +366,6 @@ async def stats(update, context):
     green = sum(1 for i in data if i['color'] == 'green')
     violet = sum(1 for i in data if i['color'] == 'violet')
     
-    # Last 100 analysis
-    last_100 = data[-100:] if total >= 100 else data
-    
-    color_count = {}
-    for item in last_100:
-        color = item['color']
-        color_count[color] = color_count.get(color, 0) + 1
-    
-    streak_color = last_100[-1]['color'] if last_100 else 'N/A'
-    streak_count = 1
-    for i in range(len(last_100)-2, -1, -1):
-        if last_100[i]['color'] == streak_color:
-            streak_count += 1
-        else:
-            break
-    
-    hot_color = max(color_count, key=color_count.get) if color_count else 'N/A'
-    
     msg = f"""
 📊 **Full Statistics**
 
@@ -326,21 +374,14 @@ async def stats(update, context):
 {get_color_emoji('red')} Red: {red} ({red/total*100:.1f}%)
 {get_color_emoji('green')} Green: {green} ({green/total*100:.1f}%)
 {get_color_emoji('violet')} Violet: {violet} ({violet/total*100:.1f}%)
-
-📈 Current Streak: {streak_count}x {streak_color.upper()}
-🔥 Hot Color (Last 100): {hot_color.upper()}
 """
     await update.message.reply_text(msg)
 
-# ============================================
-# 🧠 PATTERN DETECTION with COLORS
-# ============================================
-
 async def pattern(update, context):
-    """🎯 /pattern command - Pattern analysis with colors"""
+    """🎯 /pattern command"""
     data = load_data()
     if len(data) < 5:
-        await update.message.reply_text("⚠️ Need 5+ records. Use /add or /fetch")
+        await update.message.reply_text("⚠️ Need 5+ records.")
         return
     
     last_50 = data[-50:] if len(data) >= 50 else data
@@ -364,9 +405,6 @@ async def pattern(update, context):
     hot_color = max(color_count, key=color_count.get) if color_count else 'N/A'
     hot_number = max(number_count, key=number_count.get) if number_count else 0
     
-    last_20 = last_50[-20:] if len(last_50) >= 20 else last_50
-    pattern_seq = " → ".join([f"{get_color_emoji(item['color'])}{item['color'].upper()}" for item in last_20])
-    
     msg = f"""
 🎯 **Pattern Analysis**
 
@@ -378,21 +416,14 @@ async def pattern(update, context):
 📈 Streak: {streak_count}x {streak_color.upper()}
 🔥 Hot Color: {hot_color.upper()} ({color_count.get(hot_color, 0)}x)
 🎯 Hot Number: {hot_number} ({number_count.get(hot_number, 0)}x)
-
-📋 Last 20 Pattern:
-{pattern_seq}
 """
     await update.message.reply_text(msg)
 
-# ============================================
-# 🔮 PREDICTION with COLORS
-# ============================================
-
 async def predict(update, context):
-    """🔮 /predict command - Prediction with colors"""
+    """🔮 /predict command"""
     data = load_data()
     if len(data) < 5:
-        await update.message.reply_text("⚠️ Need 5+ records. Use /add or /fetch")
+        await update.message.reply_text("⚠️ Need 5+ records.")
         return
     
     last_100 = data[-100:] if len(data) >= 100 else data
@@ -409,46 +440,23 @@ async def predict(update, context):
     probs = {'RED': prob_red, 'GREEN': prob_green, 'VIOLET': prob_violet}
     best = max(probs, key=probs.get)
     
-    number_count = {}
-    for item in last_100:
-        num = item['number']
-        number_count[num] = number_count.get(num, 0) + 1
-    hot_number = max(number_count, key=number_count.get) if number_count else 0
-    
-    streak_color = data[-1]['color']
-    streak_count = 1
-    for i in range(len(data)-2, -1, -1):
-        if data[i]['color'] == streak_color:
-            streak_count += 1
-        else:
-            break
-    
-    best_emoji = get_color_emoji(best.lower())
-    
     msg = f"""
 🔮 **Prediction**
 
-{best_emoji} **Best Bet:** {best} ({probs[best]:.1f}%)
+{get_color_emoji(best.lower())} **Best Bet:** {best} ({probs[best]:.1f}%)
 
-📊 **Probability Distribution:**
+📊 **Probability:**
 {get_color_emoji('red')} Red: {prob_red:.1f}%
 {get_color_emoji('green')} Green: {prob_green:.1f}%
 {get_color_emoji('violet')} Violet: {prob_violet:.1f}%
 
-🎯 Hot Number: {hot_number}
-📈 Current Streak: {streak_count}x {streak_color.upper()}
-
 📦 Based on {total} rounds
-⚠️ Not financial advice. Play responsibly.
+⚠️ Not financial advice.
 """
     await update.message.reply_text(msg)
 
-# ============================================
-# 🗑️ RESET
-# ============================================
-
 async def reset_data(update, context):
-    """🗑️ /reset command - Delete all data"""
+    """🗑️ /reset command"""
     data = load_data()
     if not data:
         await update.message.reply_text("📭 No data to delete.")
@@ -457,50 +465,13 @@ async def reset_data(update, context):
     save_data([])
     await update.message.reply_text(f"🗑️ {len(data)} records deleted!")
 
-# ============================================
-# 🚀 START with GAME LINK
-# ============================================
-
-async def start(update, context):
-    """🚀 /start command with game link"""
-    keyboard = [
-        [InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"})],
-        [InlineKeyboardButton("📥 Scrape & Fetch", callback_data="fetch")],
-        [InlineKeyboardButton("📊 Stats", callback_data="stats")],
-        [InlineKeyboardButton("🔮 Prediction", callback_data="predict")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    data = load_data()
-    total = len(data)
-    
-    await update.message.reply_text(
-        f"🎯 **BDG WinGo Scrape Bot**\n\n"
-        f"📦 Total Records: {total}\n\n"
-        f"**Commands:**\n"
-        f"/add <color> <number> <size> - Single entry\n"
-        f"/addbulk color num, ... - Bulk entry\n"
-        f"/fetch - Auto scrape from game\n"
-        f"/view - View last 10 records\n"
-        f"/pattern - Pattern analysis\n"
-        f"/predict - Prediction\n"
-        f"/stats - Statistics\n"
-        f"/reset - Delete all data\n\n"
-        f"📌 Example: /add green 7 big",
-        reply_markup=reply_markup
-    )
-
-# ============================================
-# BUTTON CALLBACK
-# ============================================
-
 async def button_callback(update, context):
     """🔄 Button callbacks"""
     query = update.callback_query
     await query.answer()
     
     if query.data == "fetch":
-        await query.edit_message_text("📡 Scraping live data from BDG Game...")
+        await query.edit_message_text("📡 Scraping live data...")
         result = await scrape_bdg_live()
         if result and result['history']:
             existing = load_data()
@@ -511,10 +482,7 @@ async def button_callback(update, context):
                     existing.append(item)
                     count += 1
             save_data(existing)
-            await query.edit_message_text(
-                f"✅ {count} new records saved!\n"
-                f"📦 Total: {len(existing)} records"
-            )
+            await query.edit_message_text(f"✅ {count} new records saved!\n📦 Total: {len(existing)}")
         else:
             await query.edit_message_text("❌ No data scraped.")
     
@@ -560,7 +528,7 @@ async def button_callback(update, context):
         )
 
 # ============================================
-# ⏰ AUTO FETCH BACKGROUND
+# ⏰ AUTO FETCH
 # ============================================
 
 async def auto_fetch():
@@ -614,4 +582,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main() 
+    main()
