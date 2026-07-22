@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot
-# 🎯 FEATURES: Login, Confirm, Lottery, WinGo 1 Min, Scrape, Commands
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot (Final Version)
+# 🎯 FEATURES: Auto-login, Confirm, Lottery, WinGo 1 Min, Scrape, Anti-Detection
 # ============================================
 
 import os
@@ -41,15 +41,14 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# MAIN SCRAPER
+# MAIN SCRAPER (with Anti-Detection & Random Delays)
 # ============================================
 
 async def scrape_bdg_live():
     try:
         async with async_playwright() as p:
-            # Random User-Agent
+            # Real User-Agent & Anti-Detection
             user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            
             browser = await p.chromium.launch(
                 headless=True,
                 args=['--disable-blink-features=AutomationControlled']
@@ -101,24 +100,20 @@ async def scrape_bdg_live():
             await page.wait_for_timeout(5000 + random.randint(1000, 3000))
             print("✅ Login successful!")
 
-            # ============================================
-            # CONFIRM BUTTON (Element-based)
-            # ============================================
-            print("🎯 Looking for Confirm button (element-based)...")
+            # ---------- CONFIRM BUTTON (if popup exists) ----------
+            print("🎯 Looking for Confirm button...")
             confirm_clicked = False
 
-            # Approach 1: XPath contains
             try:
                 xpath = "//*[contains(text(),'Confirm') or contains(text(),'confirm')]"
                 element = await page.locator(xpath).first
                 if element and await element.is_visible():
                     await element.click()
                     confirm_clicked = True
-                    print("✅ Confirm clicked via XPath contains")
+                    print("✅ Confirm clicked via XPath")
             except:
                 pass
 
-            # Approach 2: CSS :has-text
             if not confirm_clicked:
                 try:
                     element = await page.locator(":has-text('Confirm')").first
@@ -129,7 +124,6 @@ async def scrape_bdg_live():
                 except:
                     pass
 
-            # Approach 3: JavaScript includes
             if not confirm_clicked:
                 try:
                     await page.evaluate("""
@@ -147,52 +141,25 @@ async def scrape_bdg_live():
                 except:
                     pass
 
-            # Approach 4: CSS selectors
-            if not confirm_clicked:
-                selectors = [
-                    "button:has-text('Confirm')",
-                    "button:has-text('confirm')",
-                    "button:has-text('OK')",
-                    "[class*='confirm']",
-                    "[class*='Confirm']",
-                    ".confirm-btn",
-                    "button[class*='confirm']",
-                    "button[class*='Confirm']"
-                ]
-                for sel in selectors:
-                    try:
-                        element = await page.query_selector(sel)
-                        if element:
-                            await element.click()
-                            confirm_clicked = True
-                            print(f"✅ Confirm clicked via CSS: {sel}")
-                            break
-                    except:
-                        continue
-
             if confirm_clicked:
                 await page.wait_for_timeout(3000 + random.randint(500, 1500))
             else:
-                print("ℹ️ No Confirm found - Skipping")
+                print("ℹ️ No Confirm - Skipping")
 
-            # ============================================
-            # LOTTERY TAB (Partial match)
-            # ============================================
-            print("🎯 Looking for Lottery tab (partial match)...")
+            # ---------- LOTTERY TAB (partial match) ----------
+            print("🎯 Looking for Lottery tab...")
             lottery_clicked = False
 
-            # Approach 1: XPath contains
             try:
                 xpath = "//*[contains(text(),'Lottery')]"
                 element = await page.locator(xpath).first
                 if element and await element.is_visible():
                     await element.click()
                     lottery_clicked = True
-                    print("✅ Lottery clicked via XPath contains")
+                    print("✅ Lottery clicked via XPath")
             except:
                 pass
 
-            # Approach 2: CSS :has-text
             if not lottery_clicked:
                 try:
                     element = await page.locator(":has-text('Lottery')").first
@@ -203,7 +170,6 @@ async def scrape_bdg_live():
                 except:
                     pass
 
-            # Approach 3: JavaScript includes
             if not lottery_clicked:
                 try:
                     await page.evaluate("""
@@ -217,11 +183,10 @@ async def scrape_bdg_live():
                         return false;
                     """)
                     lottery_clicked = True
-                    print("✅ Lottery clicked via JavaScript includes")
+                    print("✅ Lottery clicked via JavaScript")
                 except:
                     pass
 
-            # Approach 4: Parent element
             if not lottery_clicked:
                 try:
                     element = await page.locator("text=Lottery").first
@@ -230,39 +195,33 @@ async def scrape_bdg_live():
                         if parent:
                             await parent.click()
                             lottery_clicked = True
-                            print("✅ Lottery clicked via parent element")
+                            print("✅ Lottery clicked via parent")
                 except:
                     pass
 
-            # Fallback: Direct URL
             if not lottery_clicked:
                 print("⚠️ Lottery not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
                 await page.wait_for_timeout(3000 + random.randint(500, 1500))
                 lottery_clicked = True
-                print("✅ Navigated directly to WinGo page")
 
             if lottery_clicked:
                 await page.wait_for_timeout(3000 + random.randint(500, 1500))
 
-            # ============================================
-            # WIN GO 1 MIN (Partial match)
-            # ============================================
-            print("🎯 Looking for WinGo 1 Min (partial match)...")
+            # ---------- WIN GO 1 MIN (partial match) ----------
+            print("🎯 Looking for WinGo 1 Min...")
             wingo_clicked = False
 
-            # Approach 1: XPath contains
             try:
                 xpath = "//*[contains(text(),'WinGo 1 Min')]"
                 element = await page.locator(xpath).first
                 if element and await element.is_visible():
                     await element.click()
                     wingo_clicked = True
-                    print("✅ WinGo 1 Min clicked via XPath contains")
+                    print("✅ WinGo 1 Min clicked via XPath")
             except:
                 pass
 
-            # Approach 2: CSS :has-text
             if not wingo_clicked:
                 try:
                     element = await page.locator(":has-text('WinGo 1 Min')").first
@@ -273,7 +232,6 @@ async def scrape_bdg_live():
                 except:
                     pass
 
-            # Approach 3: JavaScript includes
             if not wingo_clicked:
                 try:
                     await page.evaluate("""
@@ -287,11 +245,10 @@ async def scrape_bdg_live():
                         return false;
                     """)
                     wingo_clicked = True
-                    print("✅ WinGo 1 Min clicked via JavaScript includes")
+                    print("✅ WinGo 1 Min clicked via JavaScript")
                 except:
                     pass
 
-            # Approach 4: Combined match (WinGo + 1 Min)
             if not wingo_clicked:
                 try:
                     await page.evaluate("""
@@ -310,26 +267,11 @@ async def scrape_bdg_live():
                 except:
                     pass
 
-            # Approach 5: Parent element
-            if not wingo_clicked:
-                try:
-                    element = await page.locator("text=WinGo 1 Min").first
-                    if element:
-                        parent = await element.locator("xpath=..")
-                        if parent:
-                            await parent.click()
-                            wingo_clicked = True
-                            print("✅ WinGo 1 Min clicked via parent element")
-                except:
-                    pass
-
-            # Fallback: Direct URL
             if not wingo_clicked:
                 print("⚠️ WinGo 1 Min not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
                 await page.wait_for_timeout(5000 + random.randint(1000, 3000))
                 wingo_clicked = True
-                print("✅ Navigated directly to WinGo page")
 
             if wingo_clicked:
                 await page.wait_for_timeout(5000 + random.randint(1000, 3000))
@@ -342,14 +284,9 @@ async def scrape_bdg_live():
             # ---------- TABLE SCRAPE ----------
             print("📊 Looking for table...")
             table_selectors = [
-                "table",
-                "table tbody",
-                ".game-history table",
-                ".history-table",
-                "[class*='history'] table",
-                "div[class*='table']",
-                ".ant-table",
-                ".MuiTable-root"
+                "table", "table tbody", ".game-history table",
+                ".history-table", "[class*='history'] table",
+                "div[class*='table']", ".ant-table", ".MuiTable-root"
             ]
             table = None
             for sel in table_selectors:
