@@ -1,9 +1,9 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
-# 🔗 GAME: WinGo 1Min (Playwright)
+# 🔗 GAME: WinGo 1Min (Playwright) — Scrapes Period, Number, Color, Big/Small
 # 📰 NEWS: BBC / Any URL (BeautifulSoup)
-# 🆕 NEW: debug_page.html save karega
+# 🆕 FINAL: Big/Small data extracted correctly, persistent session, auto-fetch without refresh
 # ============================================
 
 import os
@@ -113,7 +113,7 @@ class PersistentBrowser:
         await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
         print("✅ Login successful!")
 
-        # Confirm popup (if exists)
+        # ---------- CONFIRM POPUP ----------
         print("🎯 Looking for Confirm button...")
         confirm_clicked = False
         try:
@@ -164,6 +164,7 @@ class PersistentBrowser:
         print("✅ Navigated to home page")
 
     async def navigate_to_wingo(self):
+        """Navigate to WinGo page, scroll, scrape table data (stays on page)."""
         if not self.is_logged_in:
             await self.init()
         
@@ -245,30 +246,19 @@ class PersistentBrowser:
         # ---------- WAIT + SCROLL ----------
         print("⏳ Waiting for page to fully load...")
         await self.page.wait_for_timeout(8000)
-        print("📜 Scrolling down...")
+        print("📜 Scrolling down to find Big/Small table...")
         await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await self.page.wait_for_timeout(5000)
 
-        # Wait for table
-        try:
-            await self.page.wait_for_selector("table", timeout=30000)
-            print("✅ Table appeared after wait")
-        except:
-            print("⚠️ Table did not appear within 30 seconds")
-
-        # ---------- TABLE SCRAPE ----------
-        print("📊 Looking for table...")
+        # ---------- FIND TABLE ----------
+        print("📊 Looking for Game History table...")
         table_selectors = [
             "table",
-            "table tbody",
+            "table[class*='history']",
             ".game-history table",
             ".history-table",
-            "[class*='history'] table",
-            "div[class*='table']",
-            ".ant-table",
-            ".MuiTable-root",
-            "div[class*='game-history']",
-            "div[role='table']"
+            "div[class*='game-history'] table",
+            "div[class*='history'] table"
         ]
         table = None
         for sel in table_selectors:
@@ -282,23 +272,27 @@ class PersistentBrowser:
 
         if not table:
             print("❌ Table not found!")
-            # 🔍 DEBUG: Screenshot + HTML save
             await self.page.screenshot(path="debug_table.png")
-            print("📸 Debug screenshot saved")
             content = await self.page.content()
             with open("debug_page.html", "w", encoding="utf-8") as f:
                 f.write(content)
             print("📄 HTML saved to debug_page.html")
             return None
 
+        # ---------- EXTRACT ROWS ----------
+        print("🔍 Extracting rows...")
         rows = await table.query_selector_all("tbody tr")
         if not rows:
             rows = await table.query_selector_all("tr")
         if not rows:
-            print("⚠️ No rows!")
+            print("⚠️ No rows found!")
+            content = await self.page.content()
+            with open("debug_page.html", "w", encoding="utf-8") as f:
+                f.write(content)
             return None
 
-        print(f"✅ Found {len(rows)} rows")
+        print(f"✅ Found {len(rows)} rows (records)")
+
         data = []
         for row in rows[:20]:
             cols = await row.query_selector_all("td")
@@ -306,9 +300,12 @@ class PersistentBrowser:
                 try:
                     period = await cols[0].text_content()
                     number = await cols[1].text_content()
+                    
+                    # ✅ Big/Small = Column 3 (index 3)
                     size_text = await cols[3].text_content()
                     size = size_text.strip().lower() if size_text else "unknown"
 
+                    # ✅ Color = Column 2 (index 2) — the dot
                     color_value = "unknown"
                     color_elem = await cols[2].query_selector("span, div, i")
                     if color_elem:
@@ -330,11 +327,20 @@ class PersistentBrowser:
                             "size": size,
                             "timestamp": str(datetime.now())
                         })
+                        print(f"📥 Data: {period.strip()} | {number.strip()} | {size} | {color_value}")
                 except Exception as e:
                     print(f"⚠️ Row parsing error: {e}")
                     continue
 
-        return data
+        if data:
+            print(f"✅ Successfully scraped {len(data)} records (Big/Small included)!")
+            return data
+        else:
+            print("❌ No data extracted!")
+            content = await self.page.content()
+            with open("debug_page.html", "w", encoding="utf-8") as f:
+                f.write(content)
+            return None
 
     async def close(self):
         if self.browser:
@@ -347,24 +353,22 @@ class PersistentBrowser:
 
 
 # ============================================
-# GLOBAL BROWSER INSTANCE (Playwright)
+# GLOBAL BROWSER INSTANCE
 # ============================================
 
 browser_session = PersistentBrowser()
 
 # ============================================
-# BEAUTIFULSOUP HELPERS
+# BEAUTIFULSOUP HELPERS (For /news, /scrape)
 # ============================================
 
-def fetch_headlines(url, tag="h2", limit=10):
-    """Fetch headlines from a static website using BeautifulSoup."""
+def fetch_headlines(url, limit=10):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     try:
         response = requests.get(url, timeout=10, headers=headers)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         headlines = []
-        # Try common headline tags
         for t in soup.find_all(['h1', 'h2', 'h3']):
             text = t.get_text(strip=True)
             if text and len(text) > 10:
@@ -410,11 +414,10 @@ async def start(update, context):
 
 # ---------- BEAUTIFULSOUP COMMANDS ----------
 async def news_cmd(update, context):
-    """📰 Fetch BBC headlines using BeautifulSoup."""
     msg = await update.message.reply_text("📡 Fetching latest BBC headlines...")
-    headlines = fetch_headlines("https://www.bbc.com/news", tag="h2", limit=10)
+    headlines = fetch_headlines("https://www.bbc.com/news", limit=10)
     if not headlines:
-        await msg.edit_text("❌ Could not fetch headlines. BBC might have changed structure.")
+        await msg.edit_text("❌ Could not fetch headlines.")
         return
     reply = "📰 **Latest Headlines (BBC):**\n\n"
     for i, h in enumerate(headlines, 1):
@@ -422,7 +425,6 @@ async def news_cmd(update, context):
     await msg.edit_text(reply)
 
 async def scrape_url_cmd(update, context):
-    """📰 Scrape headlines from a given URL."""
     if not context.args:
         await update.message.reply_text("❗ Please provide a URL.\nExample: `/scrape https://www.bbc.com/news`")
         return
@@ -430,14 +432,14 @@ async def scrape_url_cmd(update, context):
     msg = await update.message.reply_text(f"📡 Scraping: {url}...")
     headlines = fetch_headlines(url, limit=10)
     if not headlines:
-        await msg.edit_text("❌ No headlines found or URL might be dynamic. Try another site.")
+        await msg.edit_text("❌ No headlines found or URL might be dynamic.")
         return
     reply = f"📰 **Headlines from {url}:**\n\n"
     for i, h in enumerate(headlines, 1):
         reply += f"{i}. {h}\n"
     await msg.edit_text(reply)
 
-# ---------- EXISTING COMMANDS ----------
+# ---------- BDG DATA COMMANDS ----------
 async def add_result(update, context):
     try:
         if len(context.args) < 2:
@@ -668,7 +670,7 @@ async def button_callback(update, context):
         )
 
 # ============================================
-# AUTO FETCH (Playwright)
+# AUTO FETCH (Background — Every 30 seconds)
 # ============================================
 
 async def auto_fetch():
@@ -721,4 +723,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main() 
