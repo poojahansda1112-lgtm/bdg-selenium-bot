@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot (Updated Selectors)
-# 🔗 GAME: WinGo 1 Minute
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot (Final)
+# 🔗 GAME: WinGo 1 Minute (WinGo_1M)
 # ============================================
 
 import os
@@ -41,7 +41,7 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# MAIN SCRAPER (IMPROVED SELECTORS)
+# MAIN SCRAPER
 # ============================================
 
 async def scrape_bdg_live():
@@ -146,21 +146,19 @@ async def scrape_bdg_live():
             else:
                 print("ℹ️ No Confirm - Skipping")
 
-            # ---------- LOTTERY TAB (IMPROVED) ----------
+            # ---------- LOTTERY TAB ----------
             print("🎯 Looking for Lottery tab...")
             lottery_clicked = False
 
-            # Selectors based on actual HTML (from screenshot)
             lottery_selectors = [
-                "//*[contains(text(),'Lottery')]",
-                "//span[contains(text(),'Lottery')]",
-                "//div[contains(text(),'Lottery')]",
                 "//li[contains(text(),'Lottery')]",
                 "//a[contains(text(),'Lottery')]",
-                "span:has-text('Lottery')",
-                "div:has-text('Lottery')",
+                "//span[contains(text(),'Lottery')]",
+                "//div[contains(text(),'Lottery')]",
                 "li:has-text('Lottery')",
                 "a:has-text('Lottery')",
+                "span:has-text('Lottery')",
+                "div:has-text('Lottery')",
                 "[class*='lottery']",
                 "[class*='Lottery']"
             ]
@@ -179,7 +177,6 @@ async def scrape_bdg_live():
                 except:
                     continue
 
-            # If still not clicked, try clicking parent container
             if not lottery_clicked:
                 try:
                     element = await page.locator("text=Lottery").first
@@ -192,7 +189,6 @@ async def scrape_bdg_live():
                 except:
                     pass
 
-            # Fallback: direct navigation
             if not lottery_clicked:
                 print("⚠️ Lottery not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
@@ -202,22 +198,16 @@ async def scrape_bdg_live():
             if lottery_clicked:
                 await page.wait_for_timeout(3000 + random.randint(500, 1500))
 
-            # ---------- WIN GO 1 MIN (IMPROVED) ----------
-            print("🎯 Looking for WinGo 1 Min...")
+            # ---------- WIN GO 1MIN (UPDATED) ----------
+            print("🎯 Looking for Win Go 1Min...")
             wingo_clicked = False
 
-            # Exact text from screenshot: "Win Go 1Min" (with space between Win and Go)
             wingo_selectors = [
                 "//*[contains(text(),'Win Go 1Min')]",
-                "//*[contains(text(),'WinGo 1Min')]",
-                "//*[contains(text(),'Win Go 1 Min')]",
-                "//*[contains(text(),'WinGo 1 Min')]",
-                "//*[contains(text(),'WinGo 1')]",
                 "span:has-text('Win Go 1Min')",
                 "div:has-text('Win Go 1Min')",
                 "a:has-text('Win Go 1Min')",
-                "li:has-text('Win Go 1Min')",
-                "[class*='WinGo']"
+                "li:has-text('Win Go 1Min')"
             ]
 
             for sel in wingo_selectors:
@@ -229,14 +219,13 @@ async def scrape_bdg_live():
                     if element and await element.is_visible():
                         await element.click()
                         wingo_clicked = True
-                        print(f"✅ WinGo 1 Min clicked via selector: {sel}")
+                        print(f"✅ Win Go 1Min clicked via selector: {sel}")
                         break
                 except:
                     continue
 
-            # If not clicked, try direct navigation
             if not wingo_clicked:
-                print("⚠️ WinGo 1 Min not clickable! Using direct URL...")
+                print("⚠️ Win Go 1Min not clickable! Using direct URL...")
                 await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
                 await page.wait_for_timeout(5000 + random.randint(1000, 3000))
                 wingo_clicked = True
@@ -244,33 +233,32 @@ async def scrape_bdg_live():
             if wingo_clicked:
                 await page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
-            # ---------- DIRECT NAVIGATION (WinGo 1 Min) ----------
+            # ---------- DIRECT NAVIGATION ----------
             print("🌐 Navigating directly to WinGo 1 Min page...")
             await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
             
-            # ⏰ Wait for JS to render
             print("⏳ Waiting for page to load...")
             await page.wait_for_timeout(10000)  # 10 seconds
             
-            # 🔍 Debug info
+            # Debug info
             title = await page.title()
             url = page.url
             print(f"📄 Page title: {title}")
             print(f"🌐 Final URL: {url}")
 
-            # Wait for table to appear (critical)
+            # Wait for table
             try:
                 await page.wait_for_selector("table", timeout=30000)
                 print("✅ Table appeared after wait")
             except:
                 print("⚠️ Table did not appear within 30 seconds")
 
-            # 📜 SCROLL DOWN
+            # ---------- SCROLL DOWN ----------
             print("📜 Scrolling down...")
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(3000 + random.randint(500, 1500))
 
-            # 📊 TABLE SCRAPE (enhanced selectors)
+            # ---------- TABLE SCRAPE ----------
             print("📊 Looking for table...")
             table_selectors = [
                 "table",
@@ -641,4 +629,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main() 
+    main()
