@@ -2,6 +2,7 @@
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot (Final)
 # 🔗 GAME: WinGo 1 Minute (WinGo_1M)
+# 🆕 NEW COMMAND: /screenshot
 # ============================================
 
 import os
@@ -41,13 +42,24 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# MAIN SCRAPER
+# SCREENSHOT HELPER
 # ============================================
 
-async def scrape_bdg_live():
+async def take_screenshot(page, path="screenshot.png"):
+    await page.screenshot(path=path)
+    return path
+
+# ============================================
+# MAIN SCRAPER (UPDATED)
+# ============================================
+
+async def scrape_bdg_live(screenshot_mode=False):
+    """
+    If screenshot_mode=True, it will just take a screenshot of the home page and return the file path.
+    Otherwise, it will perform full scrape.
+    """
     try:
         async with async_playwright() as p:
-            # Anti-detection
             user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             browser = await p.chromium.launch(
                 headless=True,
@@ -146,21 +158,35 @@ async def scrape_bdg_live():
             else:
                 print("ℹ️ No Confirm - Skipping")
 
+            # ---------- IF SCREENSHOT MODE ----------
+            if screenshot_mode:
+                print("📸 Taking screenshot of home page...")
+                # Wait a bit for the page to fully load
+                await page.wait_for_timeout(2000)
+                screenshot_path = "home_page.png"
+                await page.screenshot(path=screenshot_path)
+                await browser.close()
+                return screenshot_path
+
             # ---------- LOTTERY TAB ----------
             print("🎯 Looking for Lottery tab...")
             lottery_clicked = False
 
             lottery_selectors = [
-                "//li[contains(text(),'Lottery')]",
+                "//*[contains(text(),'Lottery')]",
                 "//a[contains(text(),'Lottery')]",
                 "//span[contains(text(),'Lottery')]",
                 "//div[contains(text(),'Lottery')]",
-                "li:has-text('Lottery')",
+                "//li[contains(text(),'Lottery')]",
                 "a:has-text('Lottery')",
                 "span:has-text('Lottery')",
                 "div:has-text('Lottery')",
+                "li:has-text('Lottery')",
                 "[class*='lottery']",
-                "[class*='Lottery']"
+                "[class*='Lottery']",
+                "[data-tab*='lottery']",
+                "[data-tab*='Lottery']",
+                "button:has-text('Lottery')"
             ]
 
             for sel in lottery_selectors:
@@ -198,7 +224,7 @@ async def scrape_bdg_live():
             if lottery_clicked:
                 await page.wait_for_timeout(3000 + random.randint(500, 1500))
 
-            # ---------- WIN GO 1MIN (UPDATED) ----------
+            # ---------- WIN GO 1MIN ----------
             print("🎯 Looking for Win Go 1Min...")
             wingo_clicked = False
 
@@ -236,10 +262,10 @@ async def scrape_bdg_live():
             # ---------- DIRECT NAVIGATION ----------
             print("🌐 Navigating directly to WinGo 1 Min page...")
             await page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
-            
+
             print("⏳ Waiting for page to load...")
-            await page.wait_for_timeout(10000)  # 10 seconds
-            
+            await page.wait_for_timeout(10000)
+
             # Debug info
             title = await page.title()
             url = page.url
@@ -345,7 +371,7 @@ async def scrape_bdg_live():
 
 
 # ============================================
-# TELEGRAM COMMANDS (unchanged)
+# TELEGRAM COMMANDS
 # ============================================
 
 async def start(update, context):
@@ -361,9 +387,26 @@ async def start(update, context):
         f"🎯 **BDG WinGo Scrape Bot**\n\n📦 Total Records: {total}\n\n"
         f"**Commands:**\n/add <color> <number> <size>\n/addbulk color num, ...\n"
         f"/fetch - Auto scrape\n/view - Last 10\n/pattern - Pattern\n/predict - Prediction\n"
-        f"/stats - Statistics\n/reset - Delete all\n\n📌 Example: /add green 7 big",
+        f"/stats - Statistics\n/reset - Delete all\n"
+        f"/screenshot - 📸 Take home page screenshot\n\n"
+        f"📌 Example: /add green 7 big",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+async def screenshot_cmd(update, context):
+    """📸 Take a screenshot of the home page after login."""
+    msg = await update.message.reply_text("📸 Logging in and capturing home page...")
+    result = await scrape_bdg_live(screenshot_mode=True)
+    if result and isinstance(result, str) and result.endswith(".png"):
+        with open(result, "rb") as f:
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=f,
+                caption="📸 Home page screenshot captured!"
+            )
+            await msg.edit_text("✅ Screenshot sent!")
+    else:
+        await msg.edit_text("❌ Failed to capture screenshot. Check logs.")
 
 async def add_result(update, context):
     try:
@@ -614,6 +657,7 @@ def main():
         return
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("screenshot", screenshot_cmd))
     app.add_handler(CommandHandler("add", add_result))
     app.add_handler(CommandHandler("addbulk", add_bulk))
     app.add_handler(CommandHandler("fetch", fetch_data))
@@ -629,4 +673,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main() 
