@@ -1,7 +1,9 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot — Persistent Session + Enhanced Table Selectors
-# 🔗 GAME: WinGo 1Min (WinGo_1M)
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
+# 🔗 GAME: WinGo 1Min (Playwright)
+# 📰 NEWS: BBC / Any URL (BeautifulSoup)
+# 🆕 NEW: debug_page.html save karega
 # ============================================
 
 import os
@@ -9,6 +11,8 @@ import json
 import logging
 import asyncio
 import random
+import requests
+from bs4 import BeautifulSoup
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
@@ -17,7 +21,7 @@ from playwright.async_api import async_playwright
 logging.basicConfig(level=logging.INFO)
 
 # ============================================
-# DATA STORE
+# DATA STORE (JSON)
 # ============================================
 
 DATA_FILE = "bdg_data.json"
@@ -41,11 +45,10 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# PERSISTENT BROWSER SESSION
+# PERSISTENT BROWSER SESSION (Playwright)
 # ============================================
 
 class PersistentBrowser:
-    """Ek hi browser session maintain karega, login sirf ek baar."""
     def __init__(self):
         self.browser = None
         self.context = None
@@ -59,7 +62,6 @@ class PersistentBrowser:
         
         print("🌐 Starting browser...")
         self.playwright = await async_playwright().start()
-        
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         self.browser = await self.playwright.chromium.launch(
             headless=True,
@@ -70,7 +72,6 @@ class PersistentBrowser:
             viewport={'width': 1280, 'height': 720}
         )
         self.page = await self.context.new_page()
-        
         await self._login()
         self.is_logged_in = True
         print("✅ Browser initialized and logged in")
@@ -112,10 +113,9 @@ class PersistentBrowser:
         await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
         print("✅ Login successful!")
 
-        # ---------- CONFIRM POPUP ----------
+        # Confirm popup (if exists)
         print("🎯 Looking for Confirm button...")
         confirm_clicked = False
-
         try:
             xpath = "//*[contains(text(),'Confirm') or contains(text(),'confirm')]"
             element = self.page.locator(xpath).first
@@ -159,7 +159,6 @@ class PersistentBrowser:
         if not confirm_clicked:
             print("ℹ️ No Confirm - Skipping")
 
-        # Navigate to home page manually
         await self.page.goto("https://7bdg.com/#/home", timeout=60000)
         await self.page.wait_for_timeout(3000)
         print("✅ Navigated to home page")
@@ -243,30 +242,29 @@ class PersistentBrowser:
         if wingo_clicked:
             await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
-        # ---------- EXTRA WAIT + SCROLL ----------
+        # ---------- WAIT + SCROLL ----------
         print("⏳ Waiting for page to fully load...")
-        await self.page.wait_for_timeout(8000)   # 8 seconds for SPA to render
-
+        await self.page.wait_for_timeout(8000)
         print("📜 Scrolling down...")
         await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await self.page.wait_for_timeout(5000)   # extra wait after scroll
+        await self.page.wait_for_timeout(5000)
 
-        # ---------- WAIT FOR TABLE TO APPEAR ----------
+        # Wait for table
         try:
             await self.page.wait_for_selector("table", timeout=30000)
             print("✅ Table appeared after wait")
         except:
             print("⚠️ Table did not appear within 30 seconds")
 
-        # ---------- TABLE SCRAPE (ENHANCED SELECTORS) ----------
+        # ---------- TABLE SCRAPE ----------
         print("📊 Looking for table...")
         table_selectors = [
-            "table",                               # generic
-            "table tbody",                         
-            ".game-history table",                 # if class game-history
-            ".history-table",                      # if class history-table
-            "[class*='history'] table",            # any class containing 'history'
-            "div[class*='table']",                 
+            "table",
+            "table tbody",
+            ".game-history table",
+            ".history-table",
+            "[class*='history'] table",
+            "div[class*='table']",
             ".ant-table",
             ".MuiTable-root",
             "div[class*='game-history']",
@@ -284,16 +282,20 @@ class PersistentBrowser:
 
         if not table:
             print("❌ Table not found!")
-            # Debug: screenshot and HTML
+            # 🔍 DEBUG: Screenshot + HTML save
             await self.page.screenshot(path="debug_table.png")
             print("📸 Debug screenshot saved")
+            content = await self.page.content()
+            with open("debug_page.html", "w", encoding="utf-8") as f:
+                f.write(content)
+            print("📄 HTML saved to debug_page.html")
             return None
 
         rows = await table.query_selector_all("tbody tr")
         if not rows:
             rows = await table.query_selector_all("tr")
         if not rows:
-            print("⚠️ No rows found!")
+            print("⚠️ No rows!")
             return None
 
         print(f"✅ Found {len(rows)} rows")
@@ -345,10 +347,36 @@ class PersistentBrowser:
 
 
 # ============================================
-# GLOBAL BROWSER INSTANCE
+# GLOBAL BROWSER INSTANCE (Playwright)
 # ============================================
 
 browser_session = PersistentBrowser()
+
+# ============================================
+# BEAUTIFULSOUP HELPERS
+# ============================================
+
+def fetch_headlines(url, tag="h2", limit=10):
+    """Fetch headlines from a static website using BeautifulSoup."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        response = requests.get(url, timeout=10, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        headlines = []
+        # Try common headline tags
+        for t in soup.find_all(['h1', 'h2', 'h3']):
+            text = t.get_text(strip=True)
+            if text and len(text) > 10:
+                headlines.append(text)
+        if not headlines:
+            for a in soup.find_all('a', href=True):
+                text = a.get_text(strip=True)
+                if text and len(text) > 15:
+                    headlines.append(text)
+        return headlines[:limit]
+    except Exception as e:
+        return None
 
 # ============================================
 # TELEGRAM COMMANDS
@@ -364,11 +392,13 @@ async def start(update, context):
     data = load_data()
     total = len(data)
     await update.message.reply_text(
-        f"🎯 **BDG WinGo Scrape Bot**\n\n📦 Total Records: {total}\n\n"
+        f"🎯 **BDG WinGo Scrape Bot + News Bot**\n\n📦 Total Records: {total}\n\n"
         f"**Commands:**\n"
         f"/add <color> <number> <size> - Single entry\n"
         f"/addbulk color num, ... - Bulk entry\n"
-        f"/fetch - Auto scrape\n"
+        f"/fetch - Auto scrape BDG Game\n"
+        f"/news - Get latest headlines (BBC)\n"
+        f"/scrape <url> - Get headlines from any URL\n"
         f"/view - Last 10 records\n"
         f"/pattern - Pattern analysis\n"
         f"/predict - Prediction\n"
@@ -378,6 +408,36 @@ async def start(update, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# ---------- BEAUTIFULSOUP COMMANDS ----------
+async def news_cmd(update, context):
+    """📰 Fetch BBC headlines using BeautifulSoup."""
+    msg = await update.message.reply_text("📡 Fetching latest BBC headlines...")
+    headlines = fetch_headlines("https://www.bbc.com/news", tag="h2", limit=10)
+    if not headlines:
+        await msg.edit_text("❌ Could not fetch headlines. BBC might have changed structure.")
+        return
+    reply = "📰 **Latest Headlines (BBC):**\n\n"
+    for i, h in enumerate(headlines, 1):
+        reply += f"{i}. {h}\n"
+    await msg.edit_text(reply)
+
+async def scrape_url_cmd(update, context):
+    """📰 Scrape headlines from a given URL."""
+    if not context.args:
+        await update.message.reply_text("❗ Please provide a URL.\nExample: `/scrape https://www.bbc.com/news`")
+        return
+    url = context.args[0]
+    msg = await update.message.reply_text(f"📡 Scraping: {url}...")
+    headlines = fetch_headlines(url, limit=10)
+    if not headlines:
+        await msg.edit_text("❌ No headlines found or URL might be dynamic. Try another site.")
+        return
+    reply = f"📰 **Headlines from {url}:**\n\n"
+    for i, h in enumerate(headlines, 1):
+        reply += f"{i}. {h}\n"
+    await msg.edit_text(reply)
+
+# ---------- EXISTING COMMANDS ----------
 async def add_result(update, context):
     try:
         if len(context.args) < 2:
@@ -434,18 +494,16 @@ async def add_bulk(update, context):
 
 async def fetch_data(update, context):
     global browser_session
-    msg = await update.message.reply_text("📡 Scraping live data...")
+    msg = await update.message.reply_text("📡 Scraping BDG Game data...")
     try:
         if not browser_session.is_logged_in:
             await browser_session.init()
         else:
             print("✅ Session already active, reusing browser...")
-        
         data = await browser_session.navigate_to_wingo()
         if not data:
-            await msg.edit_text("❌ Failed to scrape data. Please try again.")
+            await msg.edit_text("❌ Failed to scrape data. Table not found.")
             return
-        
         existing = load_data()
         existing_periods = {item.get('period') for item in existing}
         new_count = 0
@@ -454,7 +512,6 @@ async def fetch_data(update, context):
                 existing.append(item)
                 new_count += 1
         save_data(existing)
-        
         await msg.edit_text(
             f"✅ **Scraped Successfully!**\n"
             f"📊 New Records: {new_count}\n"
@@ -562,7 +619,7 @@ async def button_callback(update, context):
     query = update.callback_query
     await query.answer()
     if query.data == "fetch":
-        await query.edit_message_text("📡 Scraping...")
+        await query.edit_message_text("📡 Scraping BDG data...")
         global browser_session
         try:
             if not browser_session.is_logged_in:
@@ -611,7 +668,7 @@ async def button_callback(update, context):
         )
 
 # ============================================
-# AUTO FETCH
+# AUTO FETCH (Playwright)
 # ============================================
 
 async def auto_fetch():
@@ -650,13 +707,15 @@ def main():
     app.add_handler(CommandHandler("add", add_result))
     app.add_handler(CommandHandler("addbulk", add_bulk))
     app.add_handler(CommandHandler("fetch", fetch_data))
+    app.add_handler(CommandHandler("news", news_cmd))
+    app.add_handler(CommandHandler("scrape", scrape_url_cmd))
     app.add_handler(CommandHandler("view", view_data))
     app.add_handler(CommandHandler("pattern", pattern))
     app.add_handler(CommandHandler("predict", predict))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("reset", reset_data))
     app.add_handler(CallbackQueryHandler(button_callback))
-    print("✅ BDG WinGo Scrape Bot is running...")
+    print("✅ BDG WinGo Scrape Bot + News Bot is running...")
     loop = asyncio.get_event_loop()
     loop.create_task(auto_fetch())
     app.run_polling()
