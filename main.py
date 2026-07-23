@@ -2,7 +2,7 @@
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot (Final)
 # 🔗 GAME: WinGo 1 Minute (WinGo_1M)
-# 🆕 NEW COMMAND: /screenshot
+# 🆕 NEW COMMAND: /screenshot (captures home page after login)
 # ============================================
 
 import os
@@ -42,21 +42,13 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# SCREENSHOT HELPER
-# ============================================
-
-async def take_screenshot(page, path="screenshot.png"):
-    await page.screenshot(path=path)
-    return path
-
-# ============================================
-# MAIN SCRAPER (UPDATED)
+# MAIN SCRAPER (with screenshot_mode support)
 # ============================================
 
 async def scrape_bdg_live(screenshot_mode=False):
     """
-    If screenshot_mode=True, it will just take a screenshot of the home page and return the file path.
-    Otherwise, it will perform full scrape.
+    If screenshot_mode=True: login → wait for home page → screenshot → return file path.
+    Otherwise: full scrape (Lottery → WinGo → Table).
     """
     try:
         async with async_playwright() as p:
@@ -158,13 +150,22 @@ async def scrape_bdg_live(screenshot_mode=False):
             else:
                 print("ℹ️ No Confirm - Skipping")
 
-            # ---------- IF SCREENSHOT MODE ----------
+            # ---------- SCREENSHOT MODE (IMPROVED) ----------
             if screenshot_mode:
-                print("📸 Taking screenshot of home page...")
-                # Wait a bit for the page to fully load
-                await page.wait_for_timeout(2000)
+                print("📸 Waiting for home page to load...")
+                try:
+                    # Wait for "Lottery" tab to appear → home page ready
+                    await page.wait_for_selector("text=Lottery", timeout=30000)
+                    print("✅ Home page loaded successfully")
+                except:
+                    print("⚠️ Timeout waiting for home page, taking screenshot anyway...")
+                
+                # Extra wait for any lazy-loaded content
+                await page.wait_for_timeout(3000)
+                
                 screenshot_path = "home_page.png"
-                await page.screenshot(path=screenshot_path)
+                await page.screenshot(path=screenshot_path, full_page=True)
+                print(f"📸 Home page screenshot saved: {screenshot_path}")
                 await browser.close()
                 return screenshot_path
 
@@ -388,7 +389,7 @@ async def start(update, context):
         f"**Commands:**\n/add <color> <number> <size>\n/addbulk color num, ...\n"
         f"/fetch - Auto scrape\n/view - Last 10\n/pattern - Pattern\n/predict - Prediction\n"
         f"/stats - Statistics\n/reset - Delete all\n"
-        f"/screenshot - 📸 Take home page screenshot\n\n"
+        f"/screenshot - 📸 Capture home page screenshot\n\n"
         f"📌 Example: /add green 7 big",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -673,4 +674,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main() 
+    main()
