@@ -1,8 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot — Persistent Session
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot — Persistent Session + Enhanced Table Selectors
 # 🔗 GAME: WinGo 1Min (WinGo_1M)
-# 🎯 FEATURES: 1 time login, session persist, no redirect, auto-fetch
 # ============================================
 
 import os
@@ -54,7 +53,6 @@ class PersistentBrowser:
         self.is_logged_in = False
 
     async def init(self):
-        """Browser start karo aur login karo (pehli baar)."""
         if self.browser is not None:
             print("✅ Browser already initialized")
             return
@@ -62,7 +60,6 @@ class PersistentBrowser:
         print("🌐 Starting browser...")
         self.playwright = await async_playwright().start()
         
-        # Anti-detection
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         self.browser = await self.playwright.chromium.launch(
             headless=True,
@@ -74,13 +71,11 @@ class PersistentBrowser:
         )
         self.page = await self.context.new_page()
         
-        # Login karwao
         await self._login()
         self.is_logged_in = True
         print("✅ Browser initialized and logged in")
 
     async def _login(self):
-        """Login process."""
         USERNAME = os.environ.get("BDG_USERNAME")
         PASSWORD = os.environ.get("BDG_PASSWORD")
         if not USERNAME or not PASSWORD:
@@ -123,8 +118,8 @@ class PersistentBrowser:
 
         try:
             xpath = "//*[contains(text(),'Confirm') or contains(text(),'confirm')]"
-            element = await self.page.locator(xpath).first
-            if element and await element.is_visible():
+            element = self.page.locator(xpath).first
+            if await element.is_visible():
                 await element.click()
                 confirm_clicked = True
                 print("✅ Confirm clicked via XPath")
@@ -134,8 +129,8 @@ class PersistentBrowser:
 
         if not confirm_clicked:
             try:
-                element = await self.page.locator(":has-text('Confirm')").first
-                if element:
+                element = self.page.locator(":has-text('Confirm')").first
+                if await element.is_visible():
                     await element.click()
                     confirm_clicked = True
                     print("✅ Confirm clicked via :has-text")
@@ -164,13 +159,12 @@ class PersistentBrowser:
         if not confirm_clicked:
             print("ℹ️ No Confirm - Skipping")
 
-        # Navigate to home page manually to avoid redirect loop
+        # Navigate to home page manually
         await self.page.goto("https://7bdg.com/#/home", timeout=60000)
         await self.page.wait_for_timeout(3000)
         print("✅ Navigated to home page")
 
     async def navigate_to_wingo(self):
-        """Lottery → WinGo 1Min navigate karein, pehle se logged in hona chahiye."""
         if not self.is_logged_in:
             await self.init()
         
@@ -179,7 +173,6 @@ class PersistentBrowser:
         # ---------- LOTTERY TAB ----------
         print("🎯 Looking for Lottery tab...")
         lottery_clicked = False
-
         lottery_selectors = [
             "//*[contains(text(),'Lottery')]",
             "//a[contains(text(),'Lottery')]",
@@ -194,11 +187,10 @@ class PersistentBrowser:
             "[class*='Lottery']",
             "button:has-text('Lottery')"
         ]
-
         for sel in lottery_selectors:
             try:
                 if sel.startswith("//"):
-                    element = await self.page.locator(sel).first
+                    element = self.page.locator(sel).first
                 else:
                     element = await self.page.query_selector(sel)
                 if element and await element.is_visible():
@@ -208,20 +200,17 @@ class PersistentBrowser:
                     break
             except:
                 continue
-
         if not lottery_clicked:
             print("⚠️ Lottery not clickable! Using direct URL...")
             await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
             await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
             lottery_clicked = True
-
         if lottery_clicked:
             await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
 
         # ---------- WIN GO 1MIN ----------
         print("🎯 Looking for Win Go 1Min...")
         wingo_clicked = False
-
         wingo_selectors = [
             "//*[contains(text(),'Win Go 1Min')]",
             "//*[contains(text(),'WinGo 1Min')]",
@@ -233,11 +222,10 @@ class PersistentBrowser:
             "li:has-text('Win Go 1Min')",
             "[class*='WinGo']"
         ]
-
         for sel in wingo_selectors:
             try:
                 if sel.startswith("//"):
-                    element = await self.page.locator(sel).first
+                    element = self.page.locator(sel).first
                 else:
                     element = await self.page.query_selector(sel)
                 if element and await element.is_visible():
@@ -247,30 +235,38 @@ class PersistentBrowser:
                     break
             except:
                 continue
-
         if not wingo_clicked:
             print("⚠️ Win Go 1Min not clickable! Using direct URL...")
             await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
             await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
             wingo_clicked = True
-
         if wingo_clicked:
             await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
-        # ---------- SCROLL DOWN ----------
+        # ---------- EXTRA WAIT + SCROLL ----------
+        print("⏳ Waiting for page to fully load...")
+        await self.page.wait_for_timeout(8000)   # 8 seconds for SPA to render
+
         print("📜 Scrolling down...")
         await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
+        await self.page.wait_for_timeout(5000)   # extra wait after scroll
 
-        # ---------- TABLE SCRAPE ----------
+        # ---------- WAIT FOR TABLE TO APPEAR ----------
+        try:
+            await self.page.wait_for_selector("table", timeout=30000)
+            print("✅ Table appeared after wait")
+        except:
+            print("⚠️ Table did not appear within 30 seconds")
+
+        # ---------- TABLE SCRAPE (ENHANCED SELECTORS) ----------
         print("📊 Looking for table...")
         table_selectors = [
-            "table",
-            "table tbody",
-            ".game-history table",
-            ".history-table",
-            "[class*='history'] table",
-            "div[class*='table']",
+            "table",                               # generic
+            "table tbody",                         
+            ".game-history table",                 # if class game-history
+            ".history-table",                      # if class history-table
+            "[class*='history'] table",            # any class containing 'history'
+            "div[class*='table']",                 
             ".ant-table",
             ".MuiTable-root",
             "div[class*='game-history']",
@@ -281,20 +277,23 @@ class PersistentBrowser:
             try:
                 table = await self.page.query_selector(sel)
                 if table:
-                    print(f"✅ Table found: {sel}")
+                    print(f"✅ Table found with selector: {sel}")
                     break
             except:
                 continue
 
         if not table:
             print("❌ Table not found!")
+            # Debug: screenshot and HTML
+            await self.page.screenshot(path="debug_table.png")
+            print("📸 Debug screenshot saved")
             return None
 
         rows = await table.query_selector_all("tbody tr")
         if not rows:
             rows = await table.query_selector_all("tr")
         if not rows:
-            print("⚠️ No rows!")
+            print("⚠️ No rows found!")
             return None
 
         print(f"✅ Found {len(rows)} rows")
@@ -336,7 +335,6 @@ class PersistentBrowser:
         return data
 
     async def close(self):
-        """Browser close karein (optional)."""
         if self.browser:
             await self.browser.close()
             self.browser = None
