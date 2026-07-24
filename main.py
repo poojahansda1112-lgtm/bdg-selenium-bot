@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
-# 🔗 GAME: WinGo 1Min (Playwright) — Smart scroll, Table + Div rows
+# 🔗 GAME: WinGo 1Min (Playwright) — Smart Scroll Up/Down, Div-based Data
 # 📰 NEWS: BeautifulSoup (any URL)
 # ============================================
 
@@ -163,7 +163,7 @@ class PersistentBrowser:
         print("✅ Navigated to home page")
 
     async def navigate_to_wingo(self):
-        """Smart scroll with enhanced table + div row selectors."""
+        """Smart scroll with up/down attempts, div-based Big/Small data extraction."""
         if not self.is_logged_in:
             await self.init()
         
@@ -242,13 +242,12 @@ class PersistentBrowser:
         if wingo_clicked:
             await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
-        # ---------- WAIT + SMART SCROLL ----------
+        # ---------- WAIT + SMART SCROLL (UP/DOWN) ----------
         print("⏳ Waiting for page to fully load...")
         await self.page.wait_for_timeout(8000)
         
-        # 🔥 ENHANCED SELECTORS (Table + Div)
+        # ---------- CONTAINER SELECTORS ----------
         container_selectors = [
-            "table",                           # Actual table tag (priority)
             "div[class*='game-history']",
             "div[class*='history']",
             ".game-history",
@@ -256,23 +255,31 @@ class PersistentBrowser:
             "div[class*='table']",
             "div[role='table']"
         ]
+        
         row_selectors = [
-            "tbody tr",                        # Standard table rows (priority)
-            "tr",
             "div[class*='row']",
             ":scope > div",
             "div"
         ]
-        cell_selectors = ["td", "div", "span"]  # Cells can be td, div, or span
 
         max_attempts = 3
         data = None
         
         for attempt in range(max_attempts):
             print(f"📜 Scroll attempt {attempt+1}/{max_attempts}")
-            await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            
+            if attempt % 2 == 0:
+                # Even attempt: scroll down
+                print("📜 Scrolling DOWN...")
+                await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            else:
+                # Odd attempt: scroll up
+                print("📜 Scrolling UP...")
+                await self.page.evaluate("window.scrollTo(0, 0)")
+            
             await self.page.wait_for_timeout(3000)
             
+            # Find container
             container = None
             for sel in container_selectors:
                 try:
@@ -297,8 +304,7 @@ class PersistentBrowser:
                 
                 valid_rows = []
                 for row in rows:
-                    # Check if row has at least 4 child elements (period, number, color, size)
-                    children = await row.query_selector_all(", ".join(cell_selectors))
+                    children = await row.query_selector_all("div, span")
                     if len(children) >= 4:
                         valid_rows.append(row)
                 
@@ -306,13 +312,13 @@ class PersistentBrowser:
                     print(f"✅ Found {len(valid_rows)} valid rows (Attempt {attempt+1})")
                     data = []
                     for row in valid_rows[:20]:
-                        cells = await row.query_selector_all(", ".join(cell_selectors))
+                        cells = await row.query_selector_all("div, span")
                         if len(cells) >= 4:
                             try:
                                 period = await cells[0].text_content()
                                 number = await cells[1].text_content()
                                 
-                                # Color detection
+                                # Color (index 2)
                                 color_value = "unknown"
                                 color_elem = await cells[2].query_selector("span, i")
                                 if color_elem:
@@ -336,7 +342,7 @@ class PersistentBrowser:
                                         elif "violet" in cell_text or "purple" in cell_text:
                                             color_value = "violet"
 
-                                # Big/Small
+                                # Big/Small (index 3)
                                 size_text = await cells[3].text_content()
                                 size = size_text.strip().lower() if size_text else "unknown"
 
@@ -357,10 +363,9 @@ class PersistentBrowser:
                         print(f"✅ Successfully scraped {len(data)} records!")
                         return data
 
+            # If no data found, continue to next attempt
             if attempt < max_attempts - 1:
-                print("🔄 No data found / container missing. Scrolling UP and re-attempting...")
-                await self.page.evaluate("window.scrollTo(0, 0)")
-                await self.page.wait_for_timeout(2000)
+                print("🔄 No data found. Next scroll direction...")
         
         print("❌ All scroll attempts failed!")
         await self.page.screenshot(path="debug_table.png")
@@ -770,4 +775,4 @@ def main():
     app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main()w
