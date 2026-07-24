@@ -259,7 +259,11 @@ class PersistentBrowser:
         row_selectors = [
             "div[class*='row']",
             ":scope > div",
-            "div"
+            "div",
+            "tr",
+            "tbody tr",
+            "div[class*='history'] div",
+            "div[class*='game-history'] div"
         ]
 
         max_attempts = 3
@@ -304,7 +308,7 @@ class PersistentBrowser:
                 
                 valid_rows = []
                 for row in rows:
-                    children = await row.query_selector_all("div, span")
+                    children = await row.query_selector_all("div, span, td")
                     if len(children) >= 4:
                         valid_rows.append(row)
                 
@@ -312,7 +316,7 @@ class PersistentBrowser:
                     print(f"✅ Found {len(valid_rows)} valid rows (Attempt {attempt+1})")
                     data = []
                     for row in valid_rows[:20]:
-                        cells = await row.query_selector_all("div, span")
+                        cells = await row.query_selector_all("div, span, td")
                         if len(cells) >= 4:
                             try:
                                 period = await cells[0].text_content()
