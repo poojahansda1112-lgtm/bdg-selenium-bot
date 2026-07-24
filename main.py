@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
-# 🔗 GAME: WinGo 1Min (Playwright) — Login Fix + Div-based Data
+# 🔗 GAME: WinGo 1Min (Playwright) — Desktop Mode, Div-based Table
 # 📰 NEWS: BeautifulSoup (any URL)
 # ============================================
 
@@ -61,6 +61,8 @@ class PersistentBrowser:
         
         print("🌐 Starting browser...")
         self.playwright = await async_playwright().start()
+        
+        # ✅ Desktop User-Agent & Viewport (1280x720)
         user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         self.browser = await self.playwright.chromium.launch(
             headless=True,
@@ -68,7 +70,7 @@ class PersistentBrowser:
         )
         self.context = await self.browser.new_context(
             user_agent=user_agent,
-            viewport={'width': 1280, 'height': 720}
+            viewport={'width': 1280, 'height': 720}  # ✅ Desktop Mode
         )
         self.page = await self.context.new_page()
         await self._login()
@@ -162,17 +164,26 @@ class PersistentBrowser:
         current_url = self.page.url
         print(f"🌐 Current URL after login: {current_url}")
         
-        if "login" in current_url:
-            print("⚠️ Still on login page! Navigating to home...")
+        await self.page.wait_for_timeout(3000)
+        
+        if "login" in current_url or "event" in current_url:
+            print("⚠️ Still on login/event page! Navigating to home...")
             await self.page.goto("https://7bdg.com/#/home", timeout=60000)
             await self.page.wait_for_timeout(3000)
         
-        # Wait for home page to load
         try:
             await self.page.wait_for_selector("text=Lottery", timeout=15000)
             print("✅ Home page loaded successfully")
         except:
-            print("⚠️ Home page not loaded, continuing anyway...")
+            print("⚠️ Lottery tab not found! Refreshing...")
+            await self.page.reload()
+            await self.page.wait_for_timeout(3000)
+            try:
+                await self.page.wait_for_selector("text=Lottery", timeout=10000)
+                print("✅ Home page loaded after refresh")
+            except:
+                await self.page.goto("https://7bdg.com/#/home", timeout=60000)
+                await self.page.wait_for_timeout(3000)
         
         print("✅ Navigated to home page")
 
@@ -297,11 +308,7 @@ class PersistentBrowser:
             ":scope > div",
             "div",
             "tr",
-            "tbody tr",
-            "div[class*='history'] div",
-            "div[class*='game-history'] div",
-            "div[class*='item']",
-            "div[class*='record']"
+            "tbody tr"
         ]
         
         rows = []
