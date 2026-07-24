@@ -324,7 +324,7 @@ class PersistentBrowser:
                                 period = await cells[0].text_content()
                                 number = await cells[1].text_content()
                                 
-                                # Color (index 2)
+                                # Color (index 2) — dot wala column
                                 color_value = "unknown"
                                 color_elem = await cells[2].query_selector("span, i")
                                 if color_elem:
@@ -348,7 +348,7 @@ class PersistentBrowser:
                                         elif "violet" in cell_text or "purple" in cell_text:
                                             color_value = "violet"
 
-                                # Big/Small (index 3)
+                                # Big/Small (index 3) — Yellow/Blue text
                                 size_text = await cells[3].text_content()
                                 size = size_text.strip().lower() if size_text else "unknown"
 
