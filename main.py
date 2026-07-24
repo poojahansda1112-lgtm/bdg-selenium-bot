@@ -1,9 +1,8 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
-# 🔗 GAME: WinGo 1Min (Playwright) — Smart Scroll + Div-based Big/Small
-# 📰 NEWS: BBC / Any URL (BeautifulSoup)
-# 🆕 FINAL: Smart scroll (up/down), div-based "potho" rows, persistent session
+# 🔗 GAME: WinGo 1Min (Playwright) — Smart scroll, Table + Div rows
+# 📰 NEWS: BeautifulSoup (any URL)
 # ============================================
 
 import os
@@ -164,7 +163,7 @@ class PersistentBrowser:
         print("✅ Navigated to home page")
 
     async def navigate_to_wingo(self):
-        """Smart scroll + div-based Big/Small data extraction."""
+        """Smart scroll with enhanced table + div row selectors."""
         if not self.is_logged_in:
             await self.init()
         
@@ -243,11 +242,13 @@ class PersistentBrowser:
         if wingo_clicked:
             await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
-        # ---------- WAIT + SMART SCROLL RETRY ----------
+        # ---------- WAIT + SMART SCROLL ----------
         print("⏳ Waiting for page to fully load...")
         await self.page.wait_for_timeout(8000)
         
+        # 🔥 ENHANCED SELECTORS (Table + Div)
         container_selectors = [
+            "table",                           # Actual table tag (priority)
             "div[class*='game-history']",
             "div[class*='history']",
             ".game-history",
@@ -256,10 +257,13 @@ class PersistentBrowser:
             "div[role='table']"
         ]
         row_selectors = [
+            "tbody tr",                        # Standard table rows (priority)
+            "tr",
             "div[class*='row']",
             ":scope > div",
             "div"
         ]
+        cell_selectors = ["td", "div", "span"]  # Cells can be td, div, or span
 
         max_attempts = 3
         data = None
@@ -293,7 +297,8 @@ class PersistentBrowser:
                 
                 valid_rows = []
                 for row in rows:
-                    children = await row.query_selector_all("div, span")
+                    # Check if row has at least 4 child elements (period, number, color, size)
+                    children = await row.query_selector_all(", ".join(cell_selectors))
                     if len(children) >= 4:
                         valid_rows.append(row)
                 
@@ -301,12 +306,13 @@ class PersistentBrowser:
                     print(f"✅ Found {len(valid_rows)} valid rows (Attempt {attempt+1})")
                     data = []
                     for row in valid_rows[:20]:
-                        cells = await row.query_selector_all("div, span")
+                        cells = await row.query_selector_all(", ".join(cell_selectors))
                         if len(cells) >= 4:
                             try:
                                 period = await cells[0].text_content()
                                 number = await cells[1].text_content()
                                 
+                                # Color detection
                                 color_value = "unknown"
                                 color_elem = await cells[2].query_selector("span, i")
                                 if color_elem:
@@ -330,6 +336,7 @@ class PersistentBrowser:
                                         elif "violet" in cell_text or "purple" in cell_text:
                                             color_value = "violet"
 
+                                # Big/Small
                                 size_text = await cells[3].text_content()
                                 size = size_text.strip().lower() if size_text else "unknown"
 
@@ -347,7 +354,7 @@ class PersistentBrowser:
                                 continue
                     
                     if data:
-                        print(f"✅ Successfully scraped {len(data)} records (Big/Small included)!")
+                        print(f"✅ Successfully scraped {len(data)} records!")
                         return data
 
             if attempt < max_attempts - 1:
@@ -422,25 +429,42 @@ async def start(update, context):
         f"/add <color> <number> <size> - Single entry\n"
         f"/addbulk color num, ... - Bulk entry\n"
         f"/fetch - Auto scrape BDG Game\n"
-        f"/news - Get latest headlines (BBC)\n"
-        f"/scrape <url> - Get headlines from any URL\n"
+        f"/news <url> - Get headlines from any URL\n"
+        f"/scrape <url> - Scrape headlines from URL\n"
         f"/view - Last 10 records\n"
         f"/pattern - Pattern analysis\n"
         f"/predict - Prediction\n"
         f"/stats - Statistics\n"
-        f"/reset - Delete all data\n\n"
+        f"/reset - Delete all data\n"
+        f"/bdg - Open BDG Game\n"
+        f"/lobby - Open BDG Lobby\n\n"
         f"📌 Example: /add green 7 big",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# ---------- BDG GAME COMMANDS ----------
+async def bdg_cmd(update, context):
+    keyboard = [[InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"})]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("🎯 **BDG Game**\n\nClick below:", reply_markup=reply_markup)
+
+async def lobby_cmd(update, context):
+    keyboard = [[InlineKeyboardButton("🏠 Open BDG Lobby", web_app={"url": "https://7bdg.com/#/"})]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("🏠 **BDG Lobby**\n\nClick below:", reply_markup=reply_markup)
+
 # ---------- BEAUTIFULSOUP COMMANDS ----------
 async def news_cmd(update, context):
-    msg = await update.message.reply_text("📡 Fetching latest BBC headlines...")
-    headlines = fetch_headlines("https://www.bbc.com/news", limit=10)
-    if not headlines:
-        await msg.edit_text("❌ Could not fetch headlines.")
+    if not context.args:
+        await update.message.reply_text("❗ Please provide a URL.\nExample: `/news https://www.bbc.com/news`")
         return
-    reply = "📰 **Latest Headlines (BBC):**\n\n"
+    url = context.args[0]
+    msg = await update.message.reply_text(f"📡 Fetching headlines from {url}...")
+    headlines = fetch_headlines(url, limit=10)
+    if not headlines:
+        await msg.edit_text("❌ No headlines found. URL might be dynamic or inaccessible.")
+        return
+    reply = f"📰 **Headlines from {url}:**\n\n"
     for i, h in enumerate(headlines, 1):
         reply += f"{i}. {h}\n"
     await msg.edit_text(reply)
@@ -525,7 +549,7 @@ async def fetch_data(update, context):
             print("✅ Session already active, reusing browser...")
         data = await browser_session.navigate_to_wingo()
         if not data:
-            await msg.edit_text("❌ Failed to scrape data. Table not found.")
+            await msg.edit_text("❌ Failed to scrape data. Container or rows not found.")
             return
         existing = load_data()
         existing_periods = {item.get('period') for item in existing}
@@ -737,6 +761,8 @@ def main():
     app.add_handler(CommandHandler("predict", predict))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("reset", reset_data))
+    app.add_handler(CommandHandler("bdg", bdg_cmd))
+    app.add_handler(CommandHandler("lobby", lobby_cmd))
     app.add_handler(CallbackQueryHandler(button_callback))
     print("✅ BDG WinGo Scrape Bot + News Bot is running...")
     loop = asyncio.get_event_loop()
