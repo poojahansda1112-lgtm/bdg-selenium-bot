@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
-# 🔗 GAME: WinGo 1Min (Playwright) — Period, Number, Big/Small, Color
+# 🔗 GAME: WinGo 1Min (Playwright) — Login Fix + Div-based Data
 # 📰 NEWS: BeautifulSoup (any URL)
 # ============================================
 
@@ -158,8 +158,22 @@ class PersistentBrowser:
         if not confirm_clicked:
             print("ℹ️ No Confirm - Skipping")
 
-        await self.page.goto("https://7bdg.com/#/home", timeout=60000)
-        await self.page.wait_for_timeout(3000)
+        # ---------- 🔥 FIX: Ensure we are on home page ----------
+        current_url = self.page.url
+        print(f"🌐 Current URL after login: {current_url}")
+        
+        if "login" in current_url:
+            print("⚠️ Still on login page! Navigating to home...")
+            await self.page.goto("https://7bdg.com/#/home", timeout=60000)
+            await self.page.wait_for_timeout(3000)
+        
+        # Wait for home page to load
+        try:
+            await self.page.wait_for_selector("text=Lottery", timeout=15000)
+            print("✅ Home page loaded successfully")
+        except:
+            print("⚠️ Home page not loaded, continuing anyway...")
+        
         print("✅ Navigated to home page")
 
     async def navigate_to_wingo(self):
@@ -283,7 +297,11 @@ class PersistentBrowser:
             ":scope > div",
             "div",
             "tr",
-            "tbody tr"
+            "tbody tr",
+            "div[class*='history'] div",
+            "div[class*='game-history'] div",
+            "div[class*='item']",
+            "div[class*='record']"
         ]
         
         rows = []
@@ -322,12 +340,9 @@ class PersistentBrowser:
             cells = await row.query_selector_all("div, span, td")
             if len(cells) >= 4:
                 try:
-                    # Column 0: Period
                     period = await cells[0].text_content()
-                    # Column 1: Number
                     number = await cells[1].text_content()
                     
-                    # Column 2: Color (dot)
                     color_value = "unknown"
                     color_elem = await cells[2].query_selector("span, i")
                     if color_elem:
@@ -351,7 +366,6 @@ class PersistentBrowser:
                             elif "violet" in cell_text or "purple" in cell_text:
                                 color_value = "violet"
 
-                    # Column 3: Big/Small
                     size_text = await cells[3].text_content()
                     size = size_text.strip().lower() if size_text else "unknown"
 
