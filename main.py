@@ -754,7 +754,9 @@ def main():
     if not token:
         print("❌ BOT_TOKEN not set!")
         return
+    
     app = Application.builder().token(token).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("add", add_result))
     app.add_handler(CommandHandler("addbulk", add_bulk))
@@ -769,10 +771,13 @@ def main():
     app.add_handler(CommandHandler("bdg", bdg_cmd))
     app.add_handler(CommandHandler("lobby", lobby_cmd))
     app.add_handler(CallbackQueryHandler(button_callback))
+    
     print("✅ BDG WinGo Scrape Bot + News Bot is running...")
+    
     loop = asyncio.get_event_loop()
     loop.create_task(auto_fetch())
+    
     app.run_polling()
 
 if __name__ == "__main__":
-    main()w
+    main()
