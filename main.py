@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
-# 🔗 GAME: WinGo 1Min (Playwright) — Smart Scroll Up/Down, Div-based Data
+# 🔗 GAME: WinGo 1Min (Playwright) — Div-based "Potho" Rows + Smart Scroll
 # 📰 NEWS: BeautifulSoup (any URL)
 # ============================================
 
@@ -163,7 +163,7 @@ class PersistentBrowser:
         print("✅ Navigated to home page")
 
     async def navigate_to_wingo(self):
-        """Smart scroll with up/down attempts, div-based Big/Small data extraction."""
+        """Smart scroll with up/down attempts, div-based "Potho" Big/Small data extraction."""
         if not self.is_logged_in:
             await self.init()
         
@@ -246,7 +246,7 @@ class PersistentBrowser:
         print("⏳ Waiting for page to fully load...")
         await self.page.wait_for_timeout(8000)
         
-        # ---------- CONTAINER SELECTORS ----------
+        # ---------- CONTAINER SELECTORS (DIV-BASED "POTHO") ----------
         container_selectors = [
             "div[class*='game-history']",
             "div[class*='history']",
@@ -256,6 +256,7 @@ class PersistentBrowser:
             "div[role='table']"
         ]
         
+        # ---------- ROW SELECTORS (DIV-BASED) ----------
         row_selectors = [
             "div[class*='row']",
             ":scope > div",
@@ -306,6 +307,7 @@ class PersistentBrowser:
                     except:
                         continue
                 
+                # Filter valid rows (at least 4 children)
                 valid_rows = []
                 for row in rows:
                     children = await row.query_selector_all("div, span, td")
