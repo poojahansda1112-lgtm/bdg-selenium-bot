@@ -1,7 +1,7 @@
 # ============================================
 # 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
-# 🔗 GAME: WinGo 1Min (Playwright) — Desktop Mode, Div-based Table
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot (Mobile Mode)
+# 🔗 GAME: WinGo 1Min (Playwright) — Mobile View
 # 📰 NEWS: BeautifulSoup (any URL)
 # ============================================
 
@@ -44,7 +44,7 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# PERSISTENT BROWSER SESSION (Playwright)
+# PERSISTENT BROWSER SESSION (Playwright) — Mobile Mode
 # ============================================
 
 class PersistentBrowser:
@@ -62,15 +62,15 @@ class PersistentBrowser:
         print("🌐 Starting browser...")
         self.playwright = await async_playwright().start()
         
-        # ✅ Desktop User-Agent & Viewport (1280x720)
-        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        # ✅ Mobile User-Agent & Viewport (360x640)
+        user_agent = "Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
         self.browser = await self.playwright.chromium.launch(
             headless=True,
             args=['--disable-blink-features=AutomationControlled']
         )
         self.context = await self.browser.new_context(
             user_agent=user_agent,
-            viewport={'width': 1280, 'height': 720}  # ✅ Desktop Mode
+            viewport={'width': 360, 'height': 640}  # ✅ Mobile Mode
         )
         self.page = await self.context.new_page()
         await self._login()
