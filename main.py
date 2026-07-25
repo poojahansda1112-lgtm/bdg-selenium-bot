@@ -1,6 +1,6 @@
 # ============================================
-# 📁 FILE: main.py (ULTIMATE FIXED VERSION)
-# 📝 DESCRIPTION: BDG WinGo Bot - No Logout, No Back, No Stuck
+# 📁 FILE: main.py (FINAL ULTIMATE VERSION - NO CRASH)
+# 📝 DESCRIPTION: BDG WinGo Bot - Fixed Event Loop Error
 # ============================================
 
 import os
@@ -38,7 +38,7 @@ def save_data(data):
 COLORS = {"red": "🔴", "green": "🟢", "violet": "🟣"}
 
 # ============================================
-# PERSISTENT BROWSER (Playwright) - 100% FIXED
+# PERSISTENT BROWSER (Playwright) - NO LOGOUT, NO BACK
 # ============================================
 
 class PersistentBrowser:
@@ -67,7 +67,6 @@ class PersistentBrowser:
         self.is_logged_in = True
         print("✅ Browser initialized and logged in")
 
-    # ================== FIXED LOGIN ==================
     async def _login(self):
         USERNAME = os.environ.get("BDG_USERNAME")
         PASSWORD = os.environ.get("BDG_PASSWORD")
@@ -122,7 +121,6 @@ class PersistentBrowser:
         except Exception as e:
             print(f"⚠️ Error extracting token: {e}")
 
-    # ================== FIXED NAVIGATION ==================
     async def navigate_to_wingo(self):
         if not self.is_logged_in:
             await self.init()
@@ -158,10 +156,8 @@ class PersistentBrowser:
         await self.page.wait_for_timeout(8000)
         print("✅ WinGo 1Min page loaded successfully (Not stuck)")
 
-        # अब API से डेटा खींचेंगे (Browser को ओपन रखते हुए)
         return await self.get_raw_api_data()
 
-    # ================== API DATA FETCH ==================
     async def get_raw_api_data(self):
         print("📡 Fetching data directly from API...")
         
@@ -318,7 +314,7 @@ async def button_callback(update, context):
         await stats_cmd(update, context)
 
 # ============================================
-# MAIN LOOP
+# MAIN LOOP (FIXED FOR RENDER/CLOUD)
 # ============================================
 
 async def main_async():
@@ -356,10 +352,34 @@ async def main_async():
                 print(f"Auto fetch error: {e}")
             await asyncio.sleep(60)
 
-    await asyncio.gather(
-        app.run_polling(poll_interval=3),
-        auto_loop()
-    )
+    # FIX: 'run_polling' को safe way में चलाएं
+    await app.initialize()
+    await app.start()
+    
+    asyncio.create_task(auto_loop())
+    
+    print("🟢 Bot is polling...")
+    await app.updater.start_polling()
+    
+    # इसे बंद न होने दें (Run forever)
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await app.stop()
+        await app.shutdown()
+
+# ============================================
+# ENTRY POINT (CRASH FIXED)
+# ============================================
 
 if __name__ == "__main__":
-    asyncio.run(main_async())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(main_async())
+    except KeyboardInterrupt:
+        pass
