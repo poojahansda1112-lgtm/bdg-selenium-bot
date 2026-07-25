@@ -1,5 +1,5 @@
 # ============================================
-# 📁 FILE: main.py (FIXED VERSION)
+# 📁 FILE: main.py (FULLY FIXED)
 # 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot (Mobile Mode)
 # 🔗 GAME: WinGo 1Min (Playwright) — Mobile View
 # 📰 NEWS: BeautifulSoup (any URL)
@@ -70,7 +70,7 @@ class PersistentBrowser:
         )
         self.context = await self.browser.new_context(
             user_agent=user_agent,
-            viewport={'width': 360, 'height': 640}  # ✅ Mobile Mode
+            viewport={'width': 360, 'height': 640}
         )
         self.page = await self.context.new_page()
         await self._login()
@@ -114,11 +114,10 @@ class PersistentBrowser:
         await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
         print("✅ Login successful!")
 
-        # ---------- CONFIRM POPUP (FIXED) ----------
+        # ---------- CONFIRM POPUP ----------
         print("🎯 Looking for Confirm button...")
         confirm_clicked = False
         try:
-            # ✅ FIXED: Sahi XPath syntax
             xpath = "//*[contains(text(), 'Confirm') or contains(text(), 'confirm')]"
             element = self.page.locator(xpath).first
             if await element.is_visible():
@@ -161,7 +160,7 @@ class PersistentBrowser:
         if not confirm_clicked:
             print("ℹ️ No Confirm - Skipping")
 
-        # ---------- FIX: Ensure we are on home page ----------
+        # ---------- Ensure we are on home page ----------
         current_url = self.page.url
         print(f"🌐 Current URL after login: {current_url}")
         
@@ -199,11 +198,11 @@ class PersistentBrowser:
             try:
                 print("🎯 Navigating to WinGo 1Min...")
                 
-                # ---------- LOTTERY TAB (FIXED) ----------
+                # ---------- LOTTERY TAB ----------
                 print("🎯 Looking for Lottery tab...")
                 lottery_clicked = False
                 lottery_selectors = [
-                    "//*[contains(text(), 'Lottery')]",  # ✅ FIXED
+                    "//*[contains(text(), 'Lottery')]",
                     "//a[contains(text(), 'Lottery')]",
                     "//span[contains(text(), 'Lottery')]",
                     "//div[contains(text(), 'Lottery')]",
@@ -237,12 +236,12 @@ class PersistentBrowser:
                 if lottery_clicked:
                     await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
 
-                # ---------- WIN GO 1MIN (FIXED) ----------
+                # ---------- WIN GO 1MIN ----------
                 print("🎯 Looking for Win Go 1Min...")
                 wingo_clicked = False
                 wingo_selectors = [
-                    "//*[contains(., 'Win Go 1Min')]",  # ✅ FIXED
-                    "//*[contains(., 'WinGo 1Min')]",   # ✅ FIXED
+                    "//*[contains(., 'Win Go 1Min')]",
+                    "//*[contains(., 'WinGo 1Min')]",
                     "//*[contains(., 'Win Go 1 Min')]",
                     "//*[contains(., 'WinGo 1 Min')]",
                     "span:has-text('Win Go 1Min')",
@@ -279,7 +278,7 @@ class PersistentBrowser:
                 await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await self.page.wait_for_timeout(3000)
 
-                # ---------- FIND CONTAINER (STRONGER SELECTORS) ----------
+                # ---------- FIND CONTAINER ----------
                 print("📊 Looking for Game History container...")
                 container_selectors = [
                     "div[class*='game-history']",
@@ -633,7 +632,7 @@ async def fetch_data(update, context):
             f"📦 Total Records: {len(existing)}"
         )
     except Exception as e:
-        logging.error(f"❌ Fetch error: {e}")
+        logging.error(f"Fetch error: {e}")
         await msg.edit_text(f"❌ Error: {str(e)[:100]}")
 
 async def view_data(update, context):
@@ -805,4 +804,17 @@ async def auto_fetch():
                     save_data(existing)
                     print(f"✅ Auto-scraped {count} new records | Total: {len(existing)}")
         except Exception as e:
-            logging.error(f"Auto-fetch error: {
+            logging.error(f"Auto-fetch error: {e}")  # ✅ FIXED
+        await asyncio.sleep(30)
+
+# ============================================
+# MAIN
+# ============================================
+
+def main():
+    token = os.environ.get("BOT_TOKEN")
+    if not token:
+        print("❌ BOT_TOKEN not set!")
+        return
+    
+    app = Application
