@@ -1,7 +1,7 @@
 # ============================================
-# 📁 FILE: main.py (FULLY FIXED)
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot (Mobile Mode)
-# 🔗 GAME: WinGo 1Min (Playwright) — Mobile View
+# 📁 FILE: main.py
+# 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
+# 🔗 GAME: WinGo 1Min (Playwright) — 3 Tries Limit
 # 📰 NEWS: BeautifulSoup (any URL)
 # ============================================
 
@@ -44,7 +44,7 @@ def get_color_emoji(color):
     return COLORS.get(color.lower(), "⚪")
 
 # ============================================
-# PERSISTENT BROWSER SESSION (Playwright) — Mobile Mode
+# PERSISTENT BROWSER SESSION (Playwright)
 # ============================================
 
 class PersistentBrowser:
@@ -61,16 +61,14 @@ class PersistentBrowser:
         
         print("🌐 Starting browser...")
         self.playwright = await async_playwright().start()
-        
-        # ✅ Mobile User-Agent & Viewport (360x640)
-        user_agent = "Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         self.browser = await self.playwright.chromium.launch(
             headless=True,
             args=['--disable-blink-features=AutomationControlled']
         )
         self.context = await self.browser.new_context(
             user_agent=user_agent,
-            viewport={'width': 360, 'height': 640}
+            viewport={'width': 1280, 'height': 720}
         )
         self.page = await self.context.new_page()
         await self._login()
@@ -118,7 +116,7 @@ class PersistentBrowser:
         print("🎯 Looking for Confirm button...")
         confirm_clicked = False
         try:
-            xpath = "//*[contains(text(), 'Confirm') or contains(text(), 'confirm')]"
+            xpath = "//*[contains(text(),'Confirm') or contains(text(),'confirm')]"
             element = self.page.locator(xpath).first
             if await element.is_visible():
                 await element.click()
@@ -187,254 +185,225 @@ class PersistentBrowser:
         
         print("✅ Navigated to home page")
 
-    async def navigate_to_wingo(self, max_retries=3):
-        """Navigate to WinGo 1Min, scroll, extract Period, Number, Color, Big/Small."""
+    async def navigate_to_wingo(self):
+        """Smart scroll with 3 attempts (down → up → down), then stop."""
         if not self.is_logged_in:
             await self.init()
         
-        for attempt in range(max_retries):
-            print(f"\n🔄 Attempt {attempt + 1}/{max_retries}")
-            
+        print("🎯 Navigating to WinGo 1Min...")
+        
+        # ---------- LOTTERY TAB ----------
+        print("🎯 Looking for Lottery tab...")
+        lottery_clicked = False
+        lottery_selectors = [
+            "//*[contains(text(),'Lottery')]",
+            "//a[contains(text(),'Lottery')]",
+            "//span[contains(text(),'Lottery')]",
+            "//div[contains(text(),'Lottery')]",
+            "//li[contains(text(),'Lottery')]",
+            "a:has-text('Lottery')",
+            "span:has-text('Lottery')",
+            "div:has-text('Lottery')",
+            "li:has-text('Lottery')",
+            "[class*='lottery']",
+            "[class*='Lottery']",
+            "button:has-text('Lottery')"
+        ]
+        for sel in lottery_selectors:
             try:
-                print("🎯 Navigating to WinGo 1Min...")
-                
-                # ---------- LOTTERY TAB ----------
-                print("🎯 Looking for Lottery tab...")
-                lottery_clicked = False
-                lottery_selectors = [
-                    "//*[contains(text(), 'Lottery')]",
-                    "//a[contains(text(), 'Lottery')]",
-                    "//span[contains(text(), 'Lottery')]",
-                    "//div[contains(text(), 'Lottery')]",
-                    "//li[contains(text(), 'Lottery')]",
-                    "a:has-text('Lottery')",
-                    "span:has-text('Lottery')",
-                    "div:has-text('Lottery')",
-                    "li:has-text('Lottery')",
-                    "[class*='lottery']",
-                    "[class*='Lottery']",
-                    "button:has-text('Lottery')"
-                ]
-                for sel in lottery_selectors:
-                    try:
-                        if sel.startswith("//"):
-                            element = self.page.locator(sel).first
-                        else:
-                            element = await self.page.query_selector(sel)
-                        if element and await element.is_visible():
-                            await element.click()
-                            lottery_clicked = True
-                            print(f"✅ Lottery clicked via selector: {sel}")
-                            break
-                    except:
-                        continue
-                if not lottery_clicked:
-                    print("⚠️ Lottery not clickable! Using direct URL...")
-                    await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
-                    await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
+                if sel.startswith("//"):
+                    element = self.page.locator(sel).first
+                else:
+                    element = await self.page.query_selector(sel)
+                if element and await element.is_visible():
+                    await element.click()
                     lottery_clicked = True
-                if lottery_clicked:
-                    await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
+                    print(f"✅ Lottery clicked via selector: {sel}")
+                    break
+            except:
+                continue
+        if not lottery_clicked:
+            print("⚠️ Lottery not clickable! Using direct URL...")
+            await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+            await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
+            lottery_clicked = True
+        if lottery_clicked:
+            await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
 
-                # ---------- WIN GO 1MIN ----------
-                print("🎯 Looking for Win Go 1Min...")
-                wingo_clicked = False
-                wingo_selectors = [
-                    "//*[contains(., 'Win Go 1Min')]",
-                    "//*[contains(., 'WinGo 1Min')]",
-                    "//*[contains(., 'Win Go 1 Min')]",
-                    "//*[contains(., 'WinGo 1 Min')]",
-                    "span:has-text('Win Go 1Min')",
-                    "div:has-text('Win Go 1Min')",
-                    "a:has-text('Win Go 1Min')",
-                    "li:has-text('Win Go 1Min')",
-                    "[class*='WinGo']"
-                ]
-                for sel in wingo_selectors:
-                    try:
-                        if sel.startswith("//"):
-                            element = self.page.locator(sel).first
-                        else:
-                            element = await self.page.query_selector(sel)
-                        if element and await element.is_visible():
-                            await element.click()
-                            wingo_clicked = True
-                            print(f"✅ Win Go 1Min clicked via selector: {sel}")
-                            break
-                    except:
-                        continue
-                if not wingo_clicked:
-                    print("⚠️ Win Go 1Min not clickable! Using direct URL...")
-                    await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
-                    await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
+        # ---------- WIN GO 1MIN ----------
+        print("🎯 Looking for Win Go 1Min...")
+        wingo_clicked = False
+        wingo_selectors = [
+            "//*[contains(text(),'Win Go 1Min')]",
+            "//*[contains(text(),'WinGo 1Min')]",
+            "//*[contains(text(),'Win Go 1 Min')]",
+            "//*[contains(text(),'WinGo 1 Min')]",
+            "span:has-text('Win Go 1Min')",
+            "div:has-text('Win Go 1Min')",
+            "a:has-text('Win Go 1Min')",
+            "li:has-text('Win Go 1Min')",
+            "[class*='WinGo']"
+        ]
+        for sel in wingo_selectors:
+            try:
+                if sel.startswith("//"):
+                    element = self.page.locator(sel).first
+                else:
+                    element = await self.page.query_selector(sel)
+                if element and await element.is_visible():
+                    await element.click()
                     wingo_clicked = True
-                if wingo_clicked:
-                    await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
+                    print(f"✅ Win Go 1Min clicked via selector: {sel}")
+                    break
+            except:
+                continue
+        if not wingo_clicked:
+            print("⚠️ Win Go 1Min not clickable! Using direct URL...")
+            await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
+            await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
+            wingo_clicked = True
+        if wingo_clicked:
+            await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
 
-                # ---------- WAIT + SCROLL ----------
-                print("⏳ Waiting for page to fully load...")
-                await self.page.wait_for_timeout(8000)
-                print("📜 Scrolling down...")
+        # ---------- WAIT + SMART SCROLL (3 ATTEMPTS MAX) ----------
+        print("⏳ Waiting for page to fully load...")
+        await self.page.wait_for_timeout(8000)
+        
+        # ---------- CONTAINER SELECTORS ----------
+        container_selectors = [
+            "div[class*='game-history']",
+            "div[class*='history']",
+            ".game-history",
+            ".history-table",
+            "div[class*='table']",
+            "div[role='table']"
+        ]
+        
+        # ---------- ROW SELECTORS ----------
+        row_selectors = [
+            "div[class*='row']",
+            ":scope > div",
+            "div",
+            "tr",
+            "tbody tr",
+            "div[class*='history'] div",
+            "div[class*='game-history'] div",
+            "div[class*='item']",
+            "div[class*='record']",
+            "div[class*='line']"
+        ]
+
+        # ✅ MAX 3 ATTEMPTS — LOOP SE BACHNE KE LIYE
+        max_attempts = 3
+        data = None
+        
+        for attempt in range(max_attempts):
+            print(f"📜 Scroll attempt {attempt+1}/{max_attempts}")
+            
+            if attempt % 2 == 0:
+                # Even attempt: scroll down
+                print("📜 Scrolling DOWN...")
                 await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await self.page.wait_for_timeout(3000)
-
-                # ---------- FIND CONTAINER ----------
-                print("📊 Looking for Game History container...")
-                container_selectors = [
-                    "div[class*='game-history']",
-                    "div[class*='history']",
-                    ".game-history",
-                    ".history-table",
-                    "div[class*='record']",
-                    "div[class*='table']:not([class*='header'])",
-                    ".ant-table-body",
-                    "div[role='grid']",
-                    "div[class*='table']",
-                    "div[role='table']"
-                ]
-                
-                container = None
-                for sel in container_selectors:
-                    try:
-                        container = await self.page.query_selector(sel)
-                        if container:
-                            print(f"✅ Container found: {sel}")
-                            break
-                    except:
-                        continue
-
-                if not container:
-                    print("❌ Container not found!")
-                    await self.page.screenshot(path=f"debug_table_attempt_{attempt}.png")
-                    if attempt < max_retries - 1:
-                        print("🔄 Reloading page and retrying...")
-                        await self.page.reload()
-                        await self.page.wait_for_timeout(5000)
-                        continue
-                    return None
-
-                # ---------- EXTRACT ROWS ----------
-                print("🔍 Extracting rows...")
-                
-                row_selectors = [
-                    "div[class*='row']",
-                    ":scope > div",
-                    "div",
-                    "tr",
-                    "tbody tr"
-                ]
-                
+            else:
+                # Odd attempt: scroll up
+                print("📜 Scrolling UP...")
+                await self.page.evaluate("window.scrollTo(0, 0)")
+            
+            await self.page.wait_for_timeout(3000)
+            
+            # Find container
+            container = None
+            for sel in container_selectors:
+                try:
+                    container = await self.page.query_selector(sel)
+                    if container:
+                        print(f"✅ Container found with selector: {sel} (Attempt {attempt+1})")
+                        break
+                except:
+                    continue
+            
+            if container:
                 rows = []
-                for sel in row_selectors:
+                for r_sel in row_selectors:
                     try:
-                        temp_rows = await container.query_selector_all(sel)
+                        temp_rows = await container.query_selector_all(r_sel)
                         if temp_rows and len(temp_rows) > 0:
                             rows = temp_rows
-                            print(f"✅ Found {len(rows)} rows with selector: {sel}")
+                            print(f"✅ Found {len(rows)} raw rows with selector: {r_sel} (Attempt {attempt+1})")
                             break
                     except:
                         continue
-
-                if not rows:
-                    print("⚠️ No rows found!")
-                    await self.page.screenshot(path=f"debug_table_attempt_{attempt}.png")
-                    if attempt < max_retries - 1:
-                        print("🔄 Reloading page and retrying...")
-                        await self.page.reload()
-                        await self.page.wait_for_timeout(5000)
-                        continue
-                    return None
-
-                # ---------- FILTER VALID ROWS ----------
+                
                 valid_rows = []
                 for row in rows:
                     children = await row.query_selector_all("div, span, td")
                     if len(children) >= 4:
                         valid_rows.append(row)
-
-                if not valid_rows:
-                    print("⚠️ No valid rows found!")
-                    await self.page.screenshot(path=f"debug_table_attempt_{attempt}.png")
-                    if attempt < max_retries - 1:
-                        print("🔄 Reloading page and retrying...")
-                        await self.page.reload()
-                        await self.page.wait_for_timeout(5000)
-                        continue
-                    return None
-
-                print(f"✅ Found {len(valid_rows)} valid rows")
-
-                # ---------- EXTRACT DATA ----------
-                data = []
-                for row in valid_rows[:20]:
-                    cells = await row.query_selector_all("div, span, td")
-                    if len(cells) >= 4:
-                        try:
-                            period = await cells[0].text_content()
-                            number = await cells[1].text_content()
-                            
-                            color_value = "unknown"
-                            color_elem = await cells[2].query_selector("span, i")
-                            if color_elem:
-                                class_name = await color_elem.get_attribute("class") or ""
-                                style = await color_elem.get_attribute("style") or ""
-                                combined = (class_name + style).lower()
-                                if "green" in combined:
-                                    color_value = "green"
-                                elif "red" in combined:
-                                    color_value = "red"
-                                elif "violet" in combined or "purple" in combined:
-                                    color_value = "violet"
-                            if color_value == "unknown":
-                                cell_text = await cells[2].text_content()
-                                if cell_text:
-                                    cell_text = cell_text.strip().lower()
-                                    if "green" in cell_text:
+                
+                if valid_rows:
+                    print(f"✅ Found {len(valid_rows)} valid rows (Attempt {attempt+1})")
+                    data = []
+                    for row in valid_rows[:20]:
+                        cells = await row.query_selector_all("div, span, td")
+                        if len(cells) >= 4:
+                            try:
+                                period = await cells[0].text_content()
+                                number = await cells[1].text_content()
+                                
+                                color_value = "unknown"
+                                color_elem = await cells[2].query_selector("span, i")
+                                if color_elem:
+                                    class_name = await color_elem.get_attribute("class") or ""
+                                    style = await color_elem.get_attribute("style") or ""
+                                    combined = (class_name + style).lower()
+                                    if "green" in combined:
                                         color_value = "green"
-                                    elif "red" in cell_text:
+                                    elif "red" in combined:
                                         color_value = "red"
-                                    elif "violet" in cell_text or "purple" in cell_text:
+                                    elif "violet" in combined or "purple" in combined:
                                         color_value = "violet"
+                                if color_value == "unknown":
+                                    cell_text = await cells[2].text_content()
+                                    if cell_text:
+                                        cell_text = cell_text.strip().lower()
+                                        if "green" in cell_text:
+                                            color_value = "green"
+                                        elif "red" in cell_text:
+                                            color_value = "red"
+                                        elif "violet" in cell_text or "purple" in cell_text:
+                                            color_value = "violet"
 
-                            size_text = await cells[3].text_content()
-                            size = size_text.strip().lower() if size_text else "unknown"
+                                size_text = await cells[3].text_content()
+                                size = size_text.strip().lower() if size_text else "unknown"
 
-                            if period and number:
-                                data.append({
-                                    "period": period.strip(),
-                                    "number": int(number.strip()),
-                                    "color": color_value,
-                                    "size": size,
-                                    "timestamp": str(datetime.now())
-                                })
-                                print(f"📥 Data: {period.strip()} | {number.strip()} | {size} | {color_value}")
-                        except Exception as e:
-                            print(f"⚠️ Row error: {e}")
-                            continue
-
-                if data:
-                    print(f"✅ Scraped {len(data)} records!")
-                    return data
-                else:
-                    print("❌ No data extracted!")
-                    await self.page.screenshot(path=f"debug_table_attempt_{attempt}.png")
-                    if attempt < max_retries - 1:
-                        print("🔄 Reloading page and retrying...")
-                        await self.page.reload()
-                        await self.page.wait_for_timeout(5000)
-                        continue
-                    return None
+                                if period and number:
+                                    data.append({
+                                        "period": period.strip(),
+                                        "number": int(number.strip()),
+                                        "color": color_value,
+                                        "size": size,
+                                        "timestamp": str(datetime.now())
+                                    })
+                                    print(f"📥 Data: {period.strip()} | {number.strip()} | {size} | {color_value}")
+                            except Exception as e:
+                                print(f"⚠️ Row error: {e}")
+                                continue
                     
-            except Exception as e:
-                print(f"❌ Attempt {attempt + 1} failed: {e}")
-                if attempt < max_retries - 1:
-                    print("🔄 Retrying...")
-                    await self.page.reload()
-                    await self.page.wait_for_timeout(5000)
-                    continue
-                return None
+                    if data:
+                        print(f"✅ Scraped {len(data)} records!")
+                        return data
+
+            # If no data found, continue to next attempt
+            if attempt < max_attempts - 1:
+                print("🔄 No data found. Next scroll direction...")
         
-        print("❌ All retries failed!")
+        # ✅ AFTER 3 ATTEMPTS — STOP AND SAVE DEBUG
+        print(f"❌ All {max_attempts} scroll attempts failed! Stopping to avoid loop.")
+        await self.page.screenshot(path="debug_table.png")
+        content = await self.page.content()
+        with open("debug_page.html", "w", encoding="utf-8") as f:
+            f.write(content)
+        print("📄 HTML saved to debug_page.html")
         return None
 
     async def close(self):
@@ -614,9 +583,9 @@ async def fetch_data(update, context):
             await browser_session.init()
         else:
             print("✅ Session already active, reusing browser...")
-        data = await browser_session.navigate_to_wingo(max_retries=3)
+        data = await browser_session.navigate_to_wingo()
         if not data:
-            await msg.edit_text("❌ Failed to scrape data after 3 attempts. Container or rows not found.")
+            await msg.edit_text("❌ Failed to scrape data. Container or rows not found.")
             return
         existing = load_data()
         existing_periods = {item.get('period') for item in existing}
@@ -632,7 +601,7 @@ async def fetch_data(update, context):
             f"📦 Total Records: {len(existing)}"
         )
     except Exception as e:
-        logging.error(f"Fetch error: {e}")
+        logging.error(f"❌ Fetch error: {e}")
         await msg.edit_text(f"❌ Error: {str(e)[:100]}")
 
 async def view_data(update, context):
@@ -738,7 +707,7 @@ async def button_callback(update, context):
         try:
             if not browser_session.is_logged_in:
                 await browser_session.init()
-            data = await browser_session.navigate_to_wingo(max_retries=3)
+            data = await browser_session.navigate_to_wingo()
             if data:
                 existing = load_data()
                 existing_periods = {item.get('period') for item in existing}
@@ -750,7 +719,7 @@ async def button_callback(update, context):
                 save_data(existing)
                 await query.edit_message_text(f"✅ {count} new records saved!\n📦 Total: {len(existing)}")
             else:
-                await query.edit_message_text("❌ No data scraped after 3 attempts.")
+                await query.edit_message_text("❌ No data scraped.")
         except Exception as e:
             await query.edit_message_text(f"❌ Error: {str(e)[:100]}")
     elif query.data == "stats":
@@ -791,7 +760,7 @@ async def auto_fetch():
         try:
             if not browser_session.is_logged_in:
                 await browser_session.init()
-            data = await browser_session.navigate_to_wingo(max_retries=3)
+            data = await browser_session.navigate_to_wingo()
             if data:
                 existing = load_data()
                 existing_periods = {item.get('period') for item in existing}
@@ -804,7 +773,7 @@ async def auto_fetch():
                     save_data(existing)
                     print(f"✅ Auto-scraped {count} new records | Total: {len(existing)}")
         except Exception as e:
-            logging.error(f"Auto-fetch error: {e}")  # ✅ FIXED
+            logging.error(f"Auto-fetch error: {e}")
         await asyncio.sleep(30)
 
 # ============================================
@@ -817,4 +786,17 @@ def main():
         print("❌ BOT_TOKEN not set!")
         return
     
-    app = Application
+    app = Application.builder().token(token).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("add", add_result))
+    app.add_handler(CommandHandler("addbulk", add_bulk))
+    app.add_handler(CommandHandler("fetch", fetch_data))
+    app.add_handler(CommandHandler("news", news_cmd))
+    app.add_handler(CommandHandler("scrape", scrape_url_cmd))
+    app.add_handler(CommandHandler("view", view_data))
+    app.add_handler(CommandHandler("pattern", pattern))
+    app.add_handler(CommandHandler("predict", predict))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("reset", reset_data))
+    app.add_handler(CommandHandler("bdg", bdg_cmd))
