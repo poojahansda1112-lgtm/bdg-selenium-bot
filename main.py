@@ -1,13 +1,14 @@
 # ============================================
-# 📁 FILE: main.py (FINAL ULTIMATE VERSION - NO CRASH)
-# 📝 DESCRIPTION: BDG WinGo Bot - Fixed Event Loop Error
+# 📁 FILE: main.py (RAILWAY ULTIMATE FIX)
 # ============================================
 
 import os
+import sys
 import json
 import logging
 import asyncio
 import requests
+import subprocess
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
@@ -15,8 +16,21 @@ from playwright.async_api import async_playwright
 
 logging.basicConfig(level=logging.INFO)
 
+# ✅ RAILWAY FIX: Playwright Dependencies Install
+async def ensure_playwright():
+    print("🔧 Checking Playwright dependencies for Railway...")
+    try:
+        # Railway पर Playwright ब्राउज़र इंस्टॉल करना ज़रूरी है
+        result = subprocess.run(["playwright", "install", "chromium"], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("✅ Playwright Chromium installed successfully!")
+        else:
+            print(f"⚠️ Playwright install warning: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️ Could not auto-install playwright: {e}")
+
 # ============================================
-# DATA STORE (JSON)
+# DATA STORE
 # ============================================
 
 DATA_FILE = "bdg_data.json"
@@ -38,7 +52,7 @@ def save_data(data):
 COLORS = {"red": "🔴", "green": "🟢", "violet": "🟣"}
 
 # ============================================
-# PERSISTENT BROWSER (Playwright) - NO LOGOUT, NO BACK
+# PERSISTENT BROWSER (Playwright)
 # ============================================
 
 class PersistentBrowser:
@@ -55,10 +69,13 @@ class PersistentBrowser:
         
         print("🌐 Starting browser for Login...")
         self.playwright = await async_playwright().start()
+        
+        # ✅ Railway Fix: ब्राउज़र को हेडलेस (Headless) चलाएं और कुछ Arguments दें
         self.browser = await self.playwright.chromium.launch(
-            headless=True,
-            args=['--disable-blink-features=AutomationControlled']
+            headless=True,  # Railway पर हमेशा True रखें
+            args=['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-dev-shm-usage']
         )
+        
         self.context = await self.browser.new_context(
             viewport={'width': 1280, 'height': 720}
         )
@@ -78,12 +95,33 @@ class PersistentBrowser:
         await self.page.wait_for_timeout(3000)
 
         print("📝 Filling username...")
-        await self.page.fill("#username", USERNAME)
+        try:
+            await self.page.wait_for_selector("#username", timeout=15000)
+            await self.page.fill("#username", USERNAME)
+        except:
+            print("⚠️ Primary Username failed. Trying reload...")
+            await self.page.reload()
+            await self.page.wait_for_timeout(3000)
+            await self.page.fill("input[type='text']", USERNAME)
+        
+        print(f"✅ Username filled: {USERNAME}")
+
         print("🔑 Filling password...")
-        await self.page.fill("#password", PASSWORD)
+        try:
+            await self.page.wait_for_selector("#password", timeout=10000)
+            await self.page.fill("#password", PASSWORD)
+        except:
+            await self.page.fill("input[type='password']", PASSWORD)
+        
+        print("✅ Password filled")
 
         print("🖱️ Clicking login button...")
-        await self.page.click("#login-button")
+        try:
+            await self.page.wait_for_selector("#login-button", timeout=10000)
+            await self.page.click("#login-button")
+        except:
+            await self.page.click("button[type='submit']")
+
         await self.page.wait_for_timeout(5000)
         print("✅ Login successful!")
 
@@ -97,11 +135,11 @@ class PersistentBrowser:
         except:
             print("ℹ️ No Confirm - Skipping")
 
-        # FIX 1: Logout से बचने के लिए goto हटाया, सिर्फ Refresh किया
+        # ---------- REFRESH FOR HOME ----------
         print("🔄 Refreshing page to load Home tab correctly...")
         await self.page.reload()
         await self.page.wait_for_timeout(5000)
-        print("✅ Home page loaded successfully (No Logout)")
+        print("✅ Home page loaded successfully")
 
         # ---------- CAPTURE AUTH TOKEN ----------
         print("🔑 Extracting Auth Token for API...")
@@ -117,7 +155,7 @@ class PersistentBrowser:
             if self.auth_token:
                 print(f"✅ Auth Token captured successfully!")
             else:
-                print("⚠️ Auth Token not found!")
+                print("⚠️ Auth Token not found! Login might have failed.")
         except Exception as e:
             print(f"⚠️ Error extracting token: {e}")
 
@@ -127,20 +165,20 @@ class PersistentBrowser:
         
         print("🎯 Navigating to WinGo 1Min...")
         
-        # ---------- LOTTERY TAB (FIX 2: 'Back' पर क्लिक नहीं होगा) ----------
+        # ---------- LOTTERY TAB ----------
         try:
             print("🔍 Looking for Lottery tab...")
             lottery_tab = self.page.locator("a[href*='saasLottery']:has-text('Lottery'), div[role='button']:has-text('Lottery')").first
             await lottery_tab.wait_for(state="visible", timeout=5000)
             await lottery_tab.click()
-            print("✅ Lottery tab clicked (Not Back)")
+            print("✅ Lottery tab clicked")
         except:
             print("⚠️ Lottery tab not clickable! Using direct URL...")
             await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", wait_until="networkidle")
             
         await self.page.wait_for_timeout(3000)
 
-        # ---------- WIN GO 1MIN (FIX 3: फंसेगा नहीं) ----------
+        # ---------- WIN GO 1MIN ----------
         try:
             print("🔍 Looking for Win Go 1Min...")
             wingo_tab = self.page.locator("div[role='tab']:has-text('Win Go 1Min'), span:has-text('Win Go 1Min')").first
@@ -151,10 +189,9 @@ class PersistentBrowser:
             print("⚠️ WinGo tab not clickable! Retrying with URL...")
             await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", wait_until="networkidle")
 
-        # FIX 4: Data लोड होने के लिए 8 सेकंड का इंतज़ार
         print("⏳ Waiting for Game Data to fully load...")
         await self.page.wait_for_timeout(8000)
-        print("✅ WinGo 1Min page loaded successfully (Not stuck)")
+        print("✅ WinGo 1Min page loaded successfully")
 
         return await self.get_raw_api_data()
 
@@ -236,10 +273,6 @@ class PersistentBrowser:
             await self.browser.close()
             self.is_logged_in = False
 
-# ============================================
-# GLOBAL BROWSER INSTANCE
-# ============================================
-
 browser_session = PersistentBrowser()
 
 # ============================================
@@ -253,7 +286,7 @@ async def start(update, context):
         [InlineKeyboardButton("📊 Stats", callback_data="stats")]
     ]
     await update.message.reply_text(
-        "🎯 **BDG Ultimate API Bot**\n\n✅ No Logout, No Back, No Stuck!\n🚀 Direct API Data Fetching.\n\nUse /fetch to get data.",
+        "🎯 **BDG Ultimate API Bot**\n\n✅ Railway + Timeout Fixed!\n🚀 Direct API Data Fetching.\n\nUse /fetch to get data.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -263,7 +296,7 @@ async def fetch_data(update, context):
         data = await browser_session.navigate_to_wingo()
         
         if not data:
-            await msg.edit_text("❌ Failed to fetch data via API. Check your token.")
+            await msg.edit_text("❌ Failed to fetch data via API. Check your token or username/password.")
             return
         
         existing = load_data()
@@ -314,7 +347,7 @@ async def button_callback(update, context):
         await stats_cmd(update, context)
 
 # ============================================
-# MAIN LOOP (FIXED FOR RENDER/CLOUD)
+# MAIN LOOP (FIXED FOR RAILWAY)
 # ============================================
 
 async def main_async():
@@ -330,9 +363,8 @@ async def main_async():
     app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CallbackQueryHandler(button_callback))
 
-    print("🚀 Ultimate API Bot is running...")
+    print("🚀 Ultimate API Bot is running on Railway...")
     
-    # Auto fetch loop (Every 60 seconds)
     async def auto_loop():
         while True:
             try:
@@ -352,7 +384,6 @@ async def main_async():
                 print(f"Auto fetch error: {e}")
             await asyncio.sleep(60)
 
-    # FIX: 'run_polling' को safe way में चलाएं
     await app.initialize()
     await app.start()
     
@@ -361,7 +392,6 @@ async def main_async():
     print("🟢 Bot is polling...")
     await app.updater.start_polling()
     
-    # इसे बंद न होने दें (Run forever)
     try:
         await asyncio.Event().wait()
     finally:
@@ -369,10 +399,13 @@ async def main_async():
         await app.shutdown()
 
 # ============================================
-# ENTRY POINT (CRASH FIXED)
+# ENTRY POINT
 # ============================================
 
 if __name__ == "__main__":
+    # ✅ Railway पर Playwright इंस्टॉल करें और फिर बॉट चलाएं
+    asyncio.run(ensure_playwright())
+    
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
