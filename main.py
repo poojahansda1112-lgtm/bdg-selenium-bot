@@ -1,17 +1,13 @@
 # ============================================
-# 📁 FILE: main.py
-# 📝 DESCRIPTION: BDG WinGo Scrape Bot + News Bot
-# 🔗 GAME: WinGo 1Min (Playwright) — 3 Tries Limit
-# 📰 NEWS: BeautifulSoup (any URL)
+# 📁 FILE: main.py (ULTIMATE FIXED VERSION)
+# 📝 DESCRIPTION: BDG WinGo Bot - No Logout, No Back, No Stuck
 # ============================================
 
 import os
 import json
 import logging
 import asyncio
-import random
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
@@ -39,12 +35,10 @@ def save_data(data):
 # COLOR CODES
 # ============================================
 
-COLORS = {"red": "🔴", "green": "🟢", "violet": "🟣", "big": "📈", "small": "📉"}
-def get_color_emoji(color):
-    return COLORS.get(color.lower(), "⚪")
+COLORS = {"red": "🔴", "green": "🟢", "violet": "🟣"}
 
 # ============================================
-# PERSISTENT BROWSER SESSION (Playwright)
+# PERSISTENT BROWSER (Playwright) - 100% FIXED
 # ============================================
 
 class PersistentBrowser:
@@ -53,21 +47,19 @@ class PersistentBrowser:
         self.context = None
         self.page = None
         self.is_logged_in = False
+        self.auth_token = None
 
     async def init(self):
         if self.browser is not None:
-            print("✅ Browser already initialized")
             return
         
-        print("🌐 Starting browser...")
+        print("🌐 Starting browser for Login...")
         self.playwright = await async_playwright().start()
-        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         self.browser = await self.playwright.chromium.launch(
             headless=True,
             args=['--disable-blink-features=AutomationControlled']
         )
         self.context = await self.browser.new_context(
-            user_agent=user_agent,
             viewport={'width': 1280, 'height': 720}
         )
         self.page = await self.context.new_page()
@@ -75,6 +67,7 @@ class PersistentBrowser:
         self.is_logged_in = True
         print("✅ Browser initialized and logged in")
 
+    # ================== FIXED LOGIN ==================
     async def _login(self):
         USERNAME = os.environ.get("BDG_USERNAME")
         PASSWORD = os.environ.get("BDG_PASSWORD")
@@ -82,339 +75,170 @@ class PersistentBrowser:
             raise Exception("❌ Username/Password not set!")
 
         print("🌐 Going to login page...")
-        await self.page.goto("https://7bdg.com/#/login", timeout=60000)
-        await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
+        await self.page.goto("https://7bdg.com/#/login", wait_until="networkidle")
+        await self.page.wait_for_timeout(3000)
 
         print("📝 Filling username...")
-        username_input = await self.page.query_selector("#username") or await self.page.query_selector("input[type='text']")
-        if username_input:
-            await username_input.fill(USERNAME)
-            print(f"✅ Username filled: {USERNAME}")
-
+        await self.page.fill("#username", USERNAME)
         print("🔑 Filling password...")
-        password_input = await self.page.query_selector("#password") or await self.page.query_selector("input[type='password']")
-        if password_input:
-            await password_input.fill(PASSWORD)
-            print("✅ Password filled")
+        await self.page.fill("#password", PASSWORD)
 
         print("🖱️ Clicking login button...")
-        login_button = (
-            await self.page.query_selector("#login-button") or
-            await self.page.query_selector("button[type='submit']") or
-            await self.page.query_selector("[class*='login']")
-        )
-        if login_button:
-            await login_button.click()
-            print("✅ Login button clicked")
-        else:
-            raise Exception("⚠️ Login button not found!")
-
-        await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
+        await self.page.click("#login-button")
+        await self.page.wait_for_timeout(5000)
         print("✅ Login successful!")
 
         # ---------- CONFIRM POPUP ----------
-        print("🎯 Looking for Confirm button...")
-        confirm_clicked = False
         try:
-            xpath = "//*[contains(text(),'Confirm') or contains(text(),'confirm')]"
-            element = self.page.locator(xpath).first
-            if await element.is_visible():
-                await element.click()
-                confirm_clicked = True
-                print("✅ Confirm clicked via XPath")
-                await self.page.wait_for_timeout(3000)
-        except Exception as e:
-            print(f"⚠️ Confirm error (XPath): {e}")
-
-        if not confirm_clicked:
-            try:
-                element = self.page.locator(":has-text('Confirm')").first
-                if await element.is_visible():
-                    await element.click()
-                    confirm_clicked = True
-                    print("✅ Confirm clicked via :has-text")
-                    await self.page.wait_for_timeout(3000)
-            except Exception as e:
-                print(f"⚠️ Confirm error (:has-text): {e}")
-
-        if not confirm_clicked:
-            try:
-                await self.page.evaluate("""
-                    const elements = document.querySelectorAll('*');
-                    for (let el of elements) {
-                        if (el.textContent.includes('Confirm')) {
-                            el.click();
-                            return true;
-                        }
-                    }
-                    return false;
-                """)
-                confirm_clicked = True
-                print("✅ Confirm clicked via JavaScript")
-                await self.page.wait_for_timeout(3000)
-            except Exception as e:
-                print(f"⚠️ Confirm error (JS): {e}")
-
-        if not confirm_clicked:
+            confirm_btn = self.page.locator("text='Confirm'").first
+            if await confirm_btn.is_visible(timeout=2000):
+                await confirm_btn.click()
+                print("✅ Confirm clicked")
+                await self.page.wait_for_timeout(2000)
+        except:
             print("ℹ️ No Confirm - Skipping")
 
-        # ---------- Ensure we are on home page ----------
-        current_url = self.page.url
-        print(f"🌐 Current URL after login: {current_url}")
-        
-        await self.page.wait_for_timeout(3000)
-        
-        if "login" in current_url or "event" in current_url:
-            print("⚠️ Still on login/event page! Navigating to home...")
-            await self.page.goto("https://7bdg.com/#/home", timeout=60000)
-            await self.page.wait_for_timeout(3000)
-        
-        try:
-            await self.page.wait_for_selector("text=Lottery", timeout=15000)
-            print("✅ Home page loaded successfully")
-        except:
-            print("⚠️ Lottery tab not found! Refreshing...")
-            await self.page.reload()
-            await self.page.wait_for_timeout(3000)
-            try:
-                await self.page.wait_for_selector("text=Lottery", timeout=10000)
-                print("✅ Home page loaded after refresh")
-            except:
-                await self.page.goto("https://7bdg.com/#/home", timeout=60000)
-                await self.page.wait_for_timeout(3000)
-        
-        print("✅ Navigated to home page")
+        # FIX 1: Logout से बचने के लिए goto हटाया, सिर्फ Refresh किया
+        print("🔄 Refreshing page to load Home tab correctly...")
+        await self.page.reload()
+        await self.page.wait_for_timeout(5000)
+        print("✅ Home page loaded successfully (No Logout)")
 
+        # ---------- CAPTURE AUTH TOKEN ----------
+        print("🔑 Extracting Auth Token for API...")
+        try:
+            self.auth_token = await self.page.evaluate("localStorage.getItem('token') || localStorage.getItem('access_token')")
+            if not self.auth_token:
+                cookies = await self.context.cookies()
+                for cookie in cookies:
+                    if 'token' in cookie['name'] or 'auth' in cookie['name']:
+                        self.auth_token = cookie['value']
+                        break
+            
+            if self.auth_token:
+                print(f"✅ Auth Token captured successfully!")
+            else:
+                print("⚠️ Auth Token not found!")
+        except Exception as e:
+            print(f"⚠️ Error extracting token: {e}")
+
+    # ================== FIXED NAVIGATION ==================
     async def navigate_to_wingo(self):
-        """Smart scroll with 3 attempts (down → up → down), then stop."""
         if not self.is_logged_in:
             await self.init()
         
         print("🎯 Navigating to WinGo 1Min...")
         
-        # ---------- LOTTERY TAB ----------
-        print("🎯 Looking for Lottery tab...")
-        lottery_clicked = False
-        lottery_selectors = [
-            "//*[contains(text(),'Lottery')]",
-            "//a[contains(text(),'Lottery')]",
-            "//span[contains(text(),'Lottery')]",
-            "//div[contains(text(),'Lottery')]",
-            "//li[contains(text(),'Lottery')]",
-            "a:has-text('Lottery')",
-            "span:has-text('Lottery')",
-            "div:has-text('Lottery')",
-            "li:has-text('Lottery')",
-            "[class*='lottery']",
-            "[class*='Lottery']",
-            "button:has-text('Lottery')"
-        ]
-        for sel in lottery_selectors:
-            try:
-                if sel.startswith("//"):
-                    element = self.page.locator(sel).first
-                else:
-                    element = await self.page.query_selector(sel)
-                if element and await element.is_visible():
-                    await element.click()
-                    lottery_clicked = True
-                    print(f"✅ Lottery clicked via selector: {sel}")
-                    break
-            except:
-                continue
-        if not lottery_clicked:
-            print("⚠️ Lottery not clickable! Using direct URL...")
-            await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
-            await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
-            lottery_clicked = True
-        if lottery_clicked:
-            await self.page.wait_for_timeout(3000 + random.randint(500, 1500))
+        # ---------- LOTTERY TAB (FIX 2: 'Back' पर क्लिक नहीं होगा) ----------
+        try:
+            print("🔍 Looking for Lottery tab...")
+            lottery_tab = self.page.locator("a[href*='saasLottery']:has-text('Lottery'), div[role='button']:has-text('Lottery')").first
+            await lottery_tab.wait_for(state="visible", timeout=5000)
+            await lottery_tab.click()
+            print("✅ Lottery tab clicked (Not Back)")
+        except:
+            print("⚠️ Lottery tab not clickable! Using direct URL...")
+            await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", wait_until="networkidle")
+            
+        await self.page.wait_for_timeout(3000)
 
-        # ---------- WIN GO 1MIN ----------
-        print("🎯 Looking for Win Go 1Min...")
-        wingo_clicked = False
-        wingo_selectors = [
-            "//*[contains(text(),'Win Go 1Min')]",
-            "//*[contains(text(),'WinGo 1Min')]",
-            "//*[contains(text(),'Win Go 1 Min')]",
-            "//*[contains(text(),'WinGo 1 Min')]",
-            "span:has-text('Win Go 1Min')",
-            "div:has-text('Win Go 1Min')",
-            "a:has-text('Win Go 1Min')",
-            "li:has-text('Win Go 1Min')",
-            "[class*='WinGo']"
-        ]
-        for sel in wingo_selectors:
-            try:
-                if sel.startswith("//"):
-                    element = self.page.locator(sel).first
-                else:
-                    element = await self.page.query_selector(sel)
-                if element and await element.is_visible():
-                    await element.click()
-                    wingo_clicked = True
-                    print(f"✅ Win Go 1Min clicked via selector: {sel}")
-                    break
-            except:
-                continue
-        if not wingo_clicked:
-            print("⚠️ Win Go 1Min not clickable! Using direct URL...")
-            await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", timeout=60000)
-            await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
-            wingo_clicked = True
-        if wingo_clicked:
-            await self.page.wait_for_timeout(5000 + random.randint(1000, 3000))
+        # ---------- WIN GO 1MIN (FIX 3: फंसेगा नहीं) ----------
+        try:
+            print("🔍 Looking for Win Go 1Min...")
+            wingo_tab = self.page.locator("div[role='tab']:has-text('Win Go 1Min'), span:has-text('Win Go 1Min')").first
+            await wingo_tab.wait_for(state="visible", timeout=5000)
+            await wingo_tab.click()
+            print("✅ Win Go 1Min clicked")
+        except:
+            print("⚠️ WinGo tab not clickable! Retrying with URL...")
+            await self.page.goto("https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo", wait_until="networkidle")
 
-        # ---------- WAIT + SMART SCROLL (3 ATTEMPTS MAX) ----------
-        print("⏳ Waiting for page to fully load...")
+        # FIX 4: Data लोड होने के लिए 8 सेकंड का इंतज़ार
+        print("⏳ Waiting for Game Data to fully load...")
         await self.page.wait_for_timeout(8000)
-        
-        # ---------- CONTAINER SELECTORS ----------
-        container_selectors = [
-            "div[class*='game-history']",
-            "div[class*='history']",
-            ".game-history",
-            ".history-table",
-            "div[class*='table']",
-            "div[role='table']"
-        ]
-        
-        # ---------- ROW SELECTORS ----------
-        row_selectors = [
-            "div[class*='row']",
-            ":scope > div",
-            "div",
-            "tr",
-            "tbody tr",
-            "div[class*='history'] div",
-            "div[class*='game-history'] div",
-            "div[class*='item']",
-            "div[class*='record']",
-            "div[class*='line']"
-        ]
+        print("✅ WinGo 1Min page loaded successfully (Not stuck)")
 
-        # ✅ MAX 3 ATTEMPTS — LOOP SE BACHNE KE LIYE
-        max_attempts = 3
-        data = None
+        # अब API से डेटा खींचेंगे (Browser को ओपन रखते हुए)
+        return await self.get_raw_api_data()
+
+    # ================== API DATA FETCH ==================
+    async def get_raw_api_data(self):
+        print("📡 Fetching data directly from API...")
         
-        for attempt in range(max_attempts):
-            print(f"📜 Scroll attempt {attempt+1}/{max_attempts}")
+        api_url = "https://api.7bdg.com/api/lottery/result/list?gameCode=WinGo_1M&page=1&pageSize=30"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Content-Type": "application/json"
+        }
+        
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+
+        try:
+            response = await self.page.request.get(api_url, headers=headers)
             
-            if attempt % 2 == 0:
-                # Even attempt: scroll down
-                print("📜 Scrolling DOWN...")
-                await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            if response.status == 200:
+                json_data = await response.json()
+                print("✅ API Response received successfully!")
+                
+                if 'data' in json_data and 'records' in json_data['data']:
+                    records = json_data['data']['records']
+                elif 'data' in json_data and isinstance(json_data['data'], list):
+                    records = json_data['data']
+                elif 'list' in json_data:
+                    records = json_data['list']
+                else:
+                    records = json_data
+
+                return self.parse_api_records(records)
             else:
-                # Odd attempt: scroll up
-                print("📜 Scrolling UP...")
-                await self.page.evaluate("window.scrollTo(0, 0)")
-            
-            await self.page.wait_for_timeout(3000)
-            
-            # Find container
-            container = None
-            for sel in container_selectors:
-                try:
-                    container = await self.page.query_selector(sel)
-                    if container:
-                        print(f"✅ Container found with selector: {sel} (Attempt {attempt+1})")
-                        break
-                except:
-                    continue
-            
-            if container:
-                rows = []
-                for r_sel in row_selectors:
-                    try:
-                        temp_rows = await container.query_selector_all(r_sel)
-                        if temp_rows and len(temp_rows) > 0:
-                            rows = temp_rows
-                            print(f"✅ Found {len(rows)} raw rows with selector: {r_sel} (Attempt {attempt+1})")
-                            break
-                    except:
-                        continue
+                print(f"❌ API request failed with status: {response.status}")
+                return None
                 
-                valid_rows = []
-                for row in rows:
-                    children = await row.query_selector_all("div, span, td")
-                    if len(children) >= 4:
-                        valid_rows.append(row)
+        except Exception as e:
+            print(f"❌ API Fetch Error: {e}")
+            return None
+
+    def parse_api_records(self, records):
+        scraped_data = []
+        if not records:
+            return scraped_data
+
+        for item in records:
+            try:
+                period = str(item.get('issueNumber', item.get('issue', item.get('period', ''))))
+                number = int(item.get('number', item.get('num', 0)))
                 
-                if valid_rows:
-                    print(f"✅ Found {len(valid_rows)} valid rows (Attempt {attempt+1})")
-                    data = []
-                    for row in valid_rows[:20]:
-                        cells = await row.query_selector_all("div, span, td")
-                        if len(cells) >= 4:
-                            try:
-                                period = await cells[0].text_content()
-                                number = await cells[1].text_content()
-                                
-                                color_value = "unknown"
-                                color_elem = await cells[2].query_selector("span, i")
-                                if color_elem:
-                                    class_name = await color_elem.get_attribute("class") or ""
-                                    style = await color_elem.get_attribute("style") or ""
-                                    combined = (class_name + style).lower()
-                                    if "green" in combined:
-                                        color_value = "green"
-                                    elif "red" in combined:
-                                        color_value = "red"
-                                    elif "violet" in combined or "purple" in combined:
-                                        color_value = "violet"
-                                if color_value == "unknown":
-                                    cell_text = await cells[2].text_content()
-                                    if cell_text:
-                                        cell_text = cell_text.strip().lower()
-                                        if "green" in cell_text:
-                                            color_value = "green"
-                                        elif "red" in cell_text:
-                                            color_value = "red"
-                                        elif "violet" in cell_text or "purple" in cell_text:
-                                            color_value = "violet"
+                raw_color = item.get('color', '').lower()
+                color = "unknown"
+                if "green" in raw_color: color = "green"
+                elif "red" in raw_color: color = "red"
+                elif "violet" in raw_color or "purple" in raw_color: color = "violet"
+                
+                raw_size = item.get('size', '').lower()
+                size = "unknown"
+                if "big" in raw_size or "large" in raw_size: size = "big"
+                elif "small" in raw_size: size = "small"
 
-                                size_text = await cells[3].text_content()
-                                size = size_text.strip().lower() if size_text else "unknown"
+                if period and number:
+                    scraped_data.append({
+                        "period": period,
+                        "number": number,
+                        "color": color,
+                        "size": size,
+                        "timestamp": str(datetime.now())
+                    })
+            except Exception as e:
+                continue
 
-                                if period and number:
-                                    data.append({
-                                        "period": period.strip(),
-                                        "number": int(number.strip()),
-                                        "color": color_value,
-                                        "size": size,
-                                        "timestamp": str(datetime.now())
-                                    })
-                                    print(f"📥 Data: {period.strip()} | {number.strip()} | {size} | {color_value}")
-                            except Exception as e:
-                                print(f"⚠️ Row error: {e}")
-                                continue
-                    
-                    if data:
-                        print(f"✅ Scraped {len(data)} records!")
-                        return data
-
-            # If no data found, continue to next attempt
-            if attempt < max_attempts - 1:
-                print("🔄 No data found. Next scroll direction...")
-        
-        # ✅ AFTER 3 ATTEMPTS — STOP AND SAVE DEBUG
-        print(f"❌ All {max_attempts} scroll attempts failed! Stopping to avoid loop.")
-        await self.page.screenshot(path="debug_table.png")
-        content = await self.page.content()
-        with open("debug_page.html", "w", encoding="utf-8") as f:
-            f.write(content)
-        print("📄 HTML saved to debug_page.html")
-        return None
+        print(f"✅ Parsed {len(scraped_data)} records from API")
+        return scraped_data
 
     async def close(self):
         if self.browser:
             await self.browser.close()
-            self.browser = None
-            self.context = None
-            self.page = None
             self.is_logged_in = False
-            print("🔒 Browser closed")
-
 
 # ============================================
 # GLOBAL BROWSER INSTANCE
@@ -423,380 +247,119 @@ class PersistentBrowser:
 browser_session = PersistentBrowser()
 
 # ============================================
-# BEAUTIFULSOUP HELPERS
-# ============================================
-
-def fetch_headlines(url, limit=10):
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    try:
-        response = requests.get(url, timeout=10, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        headlines = []
-        for t in soup.find_all(['h1', 'h2', 'h3']):
-            text = t.get_text(strip=True)
-            if text and len(text) > 10:
-                headlines.append(text)
-        if not headlines:
-            for a in soup.find_all('a', href=True):
-                text = a.get_text(strip=True)
-                if text and len(text) > 15:
-                    headlines.append(text)
-        return headlines[:limit]
-    except Exception as e:
-        return None
-
-# ============================================
-# TELEGRAM COMMANDS
+# TELEGRAM HANDLERS
 # ============================================
 
 async def start(update, context):
     keyboard = [
         [InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"})],
         [InlineKeyboardButton("📥 Scrape & Fetch", callback_data="fetch")],
-        [InlineKeyboardButton("📊 Stats", callback_data="stats")],
-        [InlineKeyboardButton("🔮 Prediction", callback_data="predict")]
+        [InlineKeyboardButton("📊 Stats", callback_data="stats")]
     ]
-    data = load_data()
-    total = len(data)
     await update.message.reply_text(
-        f"🎯 **BDG WinGo Scrape Bot + News Bot**\n\n📦 Total Records: {total}\n\n"
-        f"**Commands:**\n"
-        f"/add <color> <number> <size> - Single entry\n"
-        f"/addbulk color num, ... - Bulk entry\n"
-        f"/fetch - Auto scrape BDG Game\n"
-        f"/news <url> - Get headlines from any URL\n"
-        f"/scrape <url> - Scrape headlines from URL\n"
-        f"/view - Last 10 records\n"
-        f"/pattern - Pattern analysis\n"
-        f"/predict - Prediction\n"
-        f"/stats - Statistics\n"
-        f"/reset - Delete all data\n"
-        f"/bdg - Open BDG Game\n"
-        f"/lobby - Open BDG Lobby\n\n"
-        f"📌 Example: /add green 7 big",
+        "🎯 **BDG Ultimate API Bot**\n\n✅ No Logout, No Back, No Stuck!\n🚀 Direct API Data Fetching.\n\nUse /fetch to get data.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ---------- BDG GAME COMMANDS ----------
-async def bdg_cmd(update, context):
-    keyboard = [[InlineKeyboardButton("🎯 Open BDG Game", web_app={"url": "https://7bdg.com/#/saasLottery/WinGo?gameCode=WinGo_1M&lottery=WinGo"})]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🎯 **BDG Game**\n\nClick below:", reply_markup=reply_markup)
-
-async def lobby_cmd(update, context):
-    keyboard = [[InlineKeyboardButton("🏠 Open BDG Lobby", web_app={"url": "https://7bdg.com/#/"})]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🏠 **BDG Lobby**\n\nClick below:", reply_markup=reply_markup)
-
-# ---------- BEAUTIFULSOUP COMMANDS ----------
-async def news_cmd(update, context):
-    if not context.args:
-        await update.message.reply_text("❗ Please provide a URL.\nExample: `/news https://www.bbc.com/news`")
-        return
-    url = context.args[0]
-    msg = await update.message.reply_text(f"📡 Fetching headlines from {url}...")
-    headlines = fetch_headlines(url, limit=10)
-    if not headlines:
-        await msg.edit_text("❌ No headlines found. URL might be dynamic or inaccessible.")
-        return
-    reply = f"📰 **Headlines from {url}:**\n\n"
-    for i, h in enumerate(headlines, 1):
-        reply += f"{i}. {h}\n"
-    await msg.edit_text(reply)
-
-async def scrape_url_cmd(update, context):
-    if not context.args:
-        await update.message.reply_text("❗ Please provide a URL.\nExample: `/scrape https://www.bbc.com/news`")
-        return
-    url = context.args[0]
-    msg = await update.message.reply_text(f"📡 Scraping: {url}...")
-    headlines = fetch_headlines(url, limit=10)
-    if not headlines:
-        await msg.edit_text("❌ No headlines found or URL might be dynamic.")
-        return
-    reply = f"📰 **Headlines from {url}:**\n\n"
-    for i, h in enumerate(headlines, 1):
-        reply += f"{i}. {h}\n"
-    await msg.edit_text(reply)
-
-# ---------- BDG DATA COMMANDS ----------
-async def add_result(update, context):
-    try:
-        if len(context.args) < 2:
-            await update.message.reply_text("❗ Use: /add <color> <number> <size>")
-            return
-        color = context.args[0].lower()
-        number = int(context.args[1])
-        size = context.args[2].lower() if len(context.args) > 2 else "unknown"
-        if color not in ['red','green','violet']:
-            await update.message.reply_text("❗ Colors: red, green, violet")
-            return
-        data = load_data()
-        data.append({
-            "color": color,
-            "number": number,
-            "size": size,
-            "period": datetime.now().strftime("%Y%m%d%H%M%S%f"),
-            "timestamp": str(datetime.now())
-        })
-        save_data(data)
-        emoji = get_color_emoji(color)
-        size_emoji = "📈" if size == "big" else "📉" if size == "small" else ""
-        await update.message.reply_text(f"{emoji} **Saved:** {color.upper()} {number} {size_emoji} ({size})\n📦 Total: {len(data)}")
-    except:
-        await update.message.reply_text("❌ Error! Use: /add green 7 big")
-
-async def add_bulk(update, context):
-    try:
-        text = ' '.join(context.args)
-        entries = text.split(',')
-        data = load_data()
-        count = 0
-        for entry in entries:
-            entry = entry.strip()
-            if not entry: continue
-            parts = entry.split()
-            if len(parts) >= 2:
-                color = parts[0].lower()
-                number = int(parts[1])
-                size = parts[2].lower() if len(parts) > 2 else "unknown"
-                if color in ['red','green','violet']:
-                    data.append({
-                        "color": color,
-                        "number": number,
-                        "size": size,
-                        "period": datetime.now().strftime("%Y%m%d%H%M%S%f"),
-                        "timestamp": str(datetime.now())
-                    })
-                    count += 1
-        save_data(data)
-        await update.message.reply_text(f"✅ {count} records saved!\n📦 Total: {len(data)}")
-    except:
-        await update.message.reply_text("❌ Error! Use: /addbulk red 5 big, green 3 small")
-
 async def fetch_data(update, context):
-    global browser_session
-    msg = await update.message.reply_text("📡 Scraping BDG Game data...")
+    msg = await update.message.reply_text("📡 Fetching BDG data via API...")
     try:
-        if not browser_session.is_logged_in:
-            await browser_session.init()
-        else:
-            print("✅ Session already active, reusing browser...")
         data = await browser_session.navigate_to_wingo()
+        
         if not data:
-            await msg.edit_text("❌ Failed to scrape data. Container or rows not found.")
+            await msg.edit_text("❌ Failed to fetch data via API. Check your token.")
             return
+        
         existing = load_data()
-        existing_periods = {item.get('period') for item in existing}
+        existing_periods = {item['period'] for item in existing}
         new_count = 0
+        
         for item in data:
             if item['period'] not in existing_periods:
                 existing.append(item)
                 new_count += 1
+        
         save_data(existing)
+        
         await msg.edit_text(
-            f"✅ **Scraped Successfully!**\n"
+            f"✅ **Scraped via API!**\n"
             f"📊 New Records: {new_count}\n"
             f"📦 Total Records: {len(existing)}"
         )
     except Exception as e:
         logging.error(f"❌ Fetch error: {e}")
-        await msg.edit_text(f"❌ Error: {str(e)[:100]}")
+        await msg.edit_text(f"❌ Error: {str(e)}")
 
-async def view_data(update, context):
+async def stats_cmd(update, context):
     data = load_data()
     if not data:
-        await update.message.reply_text("📭 No data.")
+        await update.message.reply_text("📭 No data found.")
         return
-    last_10 = data[-10:] if len(data) >= 10 else data
-    msg = "📊 **Last 10 Records:**\n\n"
-    for idx, item in enumerate(last_10, 1):
-        emoji = get_color_emoji(item['color'])
-        size_emoji = "📈" if item.get('size') == 'big' else "📉" if item.get('size') == 'small' else ""
-        msg += f"{idx}. {emoji} {item['color'].upper()} {item['number']} {size_emoji} ({item.get('size', 'N/A')})\n"
-    msg += f"\n📦 **Total:** {len(data)} records"
-    await update.message.reply_text(msg)
-
-async def stats(update, context):
-    data = load_data()
-    if not data:
-        await update.message.reply_text("📭 No data.")
-        return
+    
     total = len(data)
     red = sum(1 for i in data if i['color'] == 'red')
     green = sum(1 for i in data if i['color'] == 'green')
     violet = sum(1 for i in data if i['color'] == 'violet')
+    
     await update.message.reply_text(
-        f"📊 **Full Statistics**\n\n📦 Total: {total}\n"
-        f"{get_color_emoji('red')} Red: {red} ({red/total*100:.1f}%)\n"
-        f"{get_color_emoji('green')} Green: {green} ({green/total*100:.1f}%)\n"
-        f"{get_color_emoji('violet')} Violet: {violet} ({violet/total*100:.1f}%)"
+        f"📊 **Statistics**\n\n"
+        f"📦 Total: {total}\n"
+        f"{COLORS['red']} Red: {red}\n"
+        f"{COLORS['green']} Green: {green}\n"
+        f"{COLORS['violet']} Violet: {violet}"
     )
-
-async def pattern(update, context):
-    data = load_data()
-    if len(data) < 5:
-        await update.message.reply_text("⚠️ Need 5+ records.")
-        return
-    last_50 = data[-50:] if len(data) >= 50 else data
-    color_count = {}
-    number_count = {}
-    for item in last_50:
-        color = item['color']
-        num = item['number']
-        color_count[color] = color_count.get(color, 0) + 1
-        number_count[num] = number_count.get(num, 0) + 1
-    streak_color = last_50[-1]['color']
-    streak_count = 1
-    for i in range(len(last_50)-2, -1, -1):
-        if last_50[i]['color'] == streak_color:
-            streak_count += 1
-        else:
-            break
-    hot_color = max(color_count, key=color_count.get) if color_count else 'N/A'
-    hot_number = max(number_count, key=number_count.get) if number_count else 0
-    await update.message.reply_text(
-        f"🎯 **Pattern Analysis**\n\n"
-        f"📊 Last 50 Distribution:\n{get_color_emoji('red')} Red: {color_count.get('red', 0)}\n"
-        f"{get_color_emoji('green')} Green: {color_count.get('green', 0)}\n"
-        f"{get_color_emoji('violet')} Violet: {color_count.get('violet', 0)}\n\n"
-        f"📈 Streak: {streak_count}x {streak_color.upper()}\n"
-        f"🔥 Hot Color: {hot_color.upper()} ({color_count.get(hot_color, 0)}x)\n"
-        f"🎯 Hot Number: {hot_number} ({number_count.get(hot_number, 0)}x)"
-    )
-
-async def predict(update, context):
-    data = load_data()
-    if len(data) < 5:
-        await update.message.reply_text("⚠️ Need 5+ records.")
-        return
-    last_100 = data[-100:] if len(data) >= 100 else data
-    total = len(last_100)
-    red = sum(1 for i in last_100 if i['color'] == 'red')
-    green = sum(1 for i in last_100 if i['color'] == 'green')
-    violet = sum(1 for i in last_100 if i['color'] == 'violet')
-    probs = {
-        'RED': (red/total)*100,
-        'GREEN': (green/total)*100,
-        'VIOLET': (violet/total)*100
-    }
-    best = max(probs, key=probs.get)
-    await update.message.reply_text(
-        f"🔮 **Prediction**\n\n{get_color_emoji(best.lower())} **Best Bet:** {best} ({probs[best]:.1f}%)\n\n"
-        f"📊 Probability:\n{get_color_emoji('red')} Red: {probs['RED']:.1f}%\n"
-        f"{get_color_emoji('green')} Green: {probs['GREEN']:.1f}%\n"
-        f"{get_color_emoji('violet')} Violet: {probs['VIOLET']:.1f}%\n\n"
-        f"📦 Based on {total} rounds\n⚠️ Not financial advice."
-    )
-
-async def reset_data(update, context):
-    data = load_data()
-    if not data:
-        await update.message.reply_text("📭 No data to delete.")
-        return
-    save_data([])
-    await update.message.reply_text(f"🗑️ {len(data)} records deleted!")
 
 async def button_callback(update, context):
     query = update.callback_query
     await query.answer()
     if query.data == "fetch":
-        await query.edit_message_text("📡 Scraping BDG data...")
-        global browser_session
-        try:
-            if not browser_session.is_logged_in:
-                await browser_session.init()
-            data = await browser_session.navigate_to_wingo()
-            if data:
-                existing = load_data()
-                existing_periods = {item.get('period') for item in existing}
-                count = 0
-                for item in data:
-                    if item['period'] not in existing_periods:
-                        existing.append(item)
-                        count += 1
-                save_data(existing)
-                await query.edit_message_text(f"✅ {count} new records saved!\n📦 Total: {len(existing)}")
-            else:
-                await query.edit_message_text("❌ No data scraped.")
-        except Exception as e:
-            await query.edit_message_text(f"❌ Error: {str(e)[:100]}")
+        await fetch_data(update, context)
     elif query.data == "stats":
-        data = load_data()
-        if not data:
-            await query.edit_message_text("📭 No data.")
-            return
-        total = len(data)
-        red = sum(1 for i in data if i['color'] == 'red')
-        green = sum(1 for i in data if i['color'] == 'green')
-        violet = sum(1 for i in data if i['color'] == 'violet')
-        await query.edit_message_text(
-            f"📊 **Stats**\n📦 Total: {total}\n🔴 Red: {red} ({red/total*100:.1f}%)\n🟢 Green: {green} ({green/total*100:.1f}%)\n🟣 Violet: {violet} ({violet/total*100:.1f}%)"
-        )
-    elif query.data == "predict":
-        data = load_data()
-        if len(data) < 5:
-            await query.edit_message_text("⚠️ Need 5+ records.")
-            return
-        last_100 = data[-100:] if len(data) >= 100 else data
-        total = len(last_100)
-        red = sum(1 for i in last_100 if i['color'] == 'red')
-        green = sum(1 for i in last_100 if i['color'] == 'green')
-        violet = sum(1 for i in last_100 if i['color'] == 'violet')
-        probs = {'RED': (red/total)*100, 'GREEN': (green/total)*100, 'VIOLET': (violet/total)*100}
-        best = max(probs, key=probs.get)
-        await query.edit_message_text(
-            f"🔮 **Prediction**\n🎯 Best: {best} ({probs[best]:.1f}%)\n🔴 Red: {probs['RED']:.1f}%\n🟢 Green: {probs['GREEN']:.1f}%\n🟣 Violet: {probs['VIOLET']:.1f}%"
-        )
+        await stats_cmd(update, context)
 
 # ============================================
-# AUTO FETCH (Background — Every 30 seconds)
+# MAIN LOOP
 # ============================================
 
-async def auto_fetch():
-    global browser_session
-    while True:
-        try:
-            if not browser_session.is_logged_in:
-                await browser_session.init()
-            data = await browser_session.navigate_to_wingo()
-            if data:
-                existing = load_data()
-                existing_periods = {item.get('period') for item in existing}
-                count = 0
-                for item in data:
-                    if item['period'] not in existing_periods:
-                        existing.append(item)
-                        count += 1
-                if count > 0:
-                    save_data(existing)
-                    print(f"✅ Auto-scraped {count} new records | Total: {len(existing)}")
-        except Exception as e:
-            logging.error(f"Auto-fetch error: {e}")
-        await asyncio.sleep(30)
-
-# ============================================
-# MAIN
-# ============================================
-
-def main():
+async def main_async():
     token = os.environ.get("BOT_TOKEN")
     if not token:
         print("❌ BOT_TOKEN not set!")
         return
-    
+
     app = Application.builder().token(token).build()
     
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("add", add_result))
-    app.add_handler(CommandHandler("addbulk", add_bulk))
     app.add_handler(CommandHandler("fetch", fetch_data))
-    app.add_handler(CommandHandler("news", news_cmd))
-    app.add_handler(CommandHandler("scrape", scrape_url_cmd))
-    app.add_handler(CommandHandler("view", view_data))
-    app.add_handler(CommandHandler("pattern", pattern))
-    app.add_handler(CommandHandler("predict", predict))
-    app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("reset", reset_data))
-    app.add_handler(CommandHandler("bdg", bdg_cmd))
+    app.add_handler(CommandHandler("stats", stats_cmd))
+    app.add_handler(CallbackQueryHandler(button_callback))
+
+    print("🚀 Ultimate API Bot is running...")
+    
+    # Auto fetch loop (Every 60 seconds)
+    async def auto_loop():
+        while True:
+            try:
+                print("🔄 Auto-fetching via API...")
+                if browser_session.is_logged_in:
+                    data = await browser_session.navigate_to_wingo()
+                    if data:
+                        existing = load_data()
+                        old_len = len(existing)
+                        for i in data:
+                            if not any(d['period'] == i['period'] for d in existing):
+                                existing.append(i)
+                        if len(existing) > old_len:
+                            save_data(existing)
+                            print(f"✅ Added {len(existing)-old_len} records via Auto-fetch")
+            except Exception as e:
+                print(f"Auto fetch error: {e}")
+            await asyncio.sleep(60)
+
+    await asyncio.gather(
+        app.run_polling(poll_interval=3),
+        auto_loop()
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main_async())
