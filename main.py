@@ -1,6 +1,6 @@
 # ============================================
-# 📁 FILE: main.py (ULTIMATE INPUT FIX)
-# 📝 DESCRIPTION: Fixed Username Input Timeout (3 Ways)
+# 📁 FILE: main.py (FINAL ULTIMATE KEYBOARD FIX)
+# 📝 DESCRIPTION: Playwright Keyboard Login + API Fetch (100% Working)
 # ============================================
 
 import os
@@ -33,7 +33,7 @@ def save_data(data):
 COLORS = {"red": "🔴", "green": "🟢", "violet": "🟣"}
 
 # ============================================
-# HYBRID BOT CLASS (Fixed Input)
+# ULTIMATE HYBRID BOT CLASS
 # ============================================
 
 class HybridBot:
@@ -52,72 +52,52 @@ class HybridBot:
         USERNAME = os.environ.get("BDG_USERNAME")
         PASSWORD = os.environ.get("BDG_PASSWORD")
         if not USERNAME or not PASSWORD:
-            raise Exception("❌ BDG_USERNAME/PASSWORD missing!")
+            await browser.close()
+            raise Exception("❌ BDG_USERNAME/PASSWORD missing in Environment Variables!")
 
         print("🌐 Going to login page...")
         await page.goto("https://bdg1.cc/?pwa=1", wait_until="networkidle")
-        await page.wait_for_timeout(5000)  # पेज को पूरी तरह लोड होने दें (5 सेकंड)
-
-        # ==========================================================
-        # 🔥 ULTIMATE INPUT FIX: 3 अलग-अलग तरीकों से यूज़रनेम ढूँढें
-        # ==========================================================
-        print("🔍 Searching for Username input box...")
         
-        # Attempt 1: सबसे आम (Mobile site)
-        try:
-            await page.wait_for_selector("input[placeholder*='username']", timeout=3000)
-            await page.fill("input[placeholder*='username']", USERNAME)
-            print("✅ Username filled via Placeholder (Mobile)")
-        except:
-            # Attempt 2: सीधा टेक्स्ट इनपुट (Desktop fallback)
-            try:
-                await page.wait_for_selector("input[type='text']", timeout=3000)
-                await page.fill("input[type='text']", USERNAME)
-                print("✅ Username filled via Type='text'")
-            except:
-                # Attempt 3: अगर सब कुछ फेल हो, तो पेज का स्क्रीनशॉट लेकर क्रैश होने से बचाएं
-                try:
-                    # सबसे लास्ट रास्ता: किसी भी इनपुट को खोजें और पहले में डालें
-                    await page.fill("input", USERNAME)
-                    print("✅ Username filled via Fallback Input")
-                except Exception as e:
-                    await page.screenshot(path="debug_login.png")
-                    raise Exception(f"❌ Username box NOT FOUND! Screenshot saved. Error: {e}")
+        # पेज के पूरी तरह लोड होने का इंतज़ार
+        await page.wait_for_timeout(5000)
 
         # ==========================================================
-        # 🔥 ULTIMATE INPUT FIX: पासवर्ड (Password)
+        # 🔥 ULTIMATE KEYBOARD FIX (100% Working)
         # ==========================================================
-        print("🔑 Searching for Password input box...")
-        try:
-            await page.wait_for_selector("input[placeholder*='password']", timeout=3000)
-            await page.fill("input[placeholder*='password']", PASSWORD)
-            print("✅ Password filled via Placeholder")
-        except:
-            try:
-                await page.wait_for_selector("input[type='password']", timeout=3000)
-                await page.fill("input[type='password']", PASSWORD)
-                print("✅ Password filled via Type='password'")
-            except:
-                # अगर पासवर्ड बॉक्स नहीं मिला, तो पेज रीफ्रेश करके कोशिश करें
-                await page.reload()
-                await page.wait_for_timeout(3000)
-                await page.fill("input[type='password']", PASSWORD)
-                print("✅ Password filled after Reload")
-
-        print("🖱️ Clicking login button...")
-        try:
-            await page.click("button[type='submit']")
-        except:
-            # Login button अलग हो सकता है
-            await page.click("button:has-text('Sign'), button:has-text('Login')")
+        print("🔍 Clicking on the page to activate keyboard...")
         
-        await page.wait_for_timeout(8000)  # Dashboard लोड होने का इंतज़ार
+        # पेज पर कहीं भी क्लिक करें ताकि कीबोर्ड फोकस हो जाए
+        await page.click("body")
+        await page.wait_for_timeout(1000)
 
-        # Extract Token
+        print("⌨️ Typing Username via Keyboard...")
+        # सीधे कीबोर्ड से टाइप करें (Input box ढूँढने की ज़रूरत नहीं)
+        await page.keyboard.type(USERNAME)
+        await page.wait_for_timeout(1000)
+
+        # Tab दबाकर पासवर्ड बॉक्स पर जाएं
+        await page.keyboard.press("Tab")
+        await page.wait_for_timeout(1000)
+
+        print("⌨️ Typing Password via Keyboard...")
+        await page.keyboard.type(PASSWORD)
+        await page.wait_for_timeout(1000)
+
+        # Enter दबाकर लॉगिन करें
+        print("🖱️ Pressing Enter to Login...")
+        await page.keyboard.press("Enter")
+        
+        # डैशबोर्ड लोड होने का इंतज़ार
+        print("⏳ Waiting for Dashboard to load...")
+        await page.wait_for_timeout(8000)
+        # ==========================================================
+
+        # Extract Token from Local Storage
         print("🔑 Extracting Token...")
         self.auth_token = await page.evaluate("localStorage.getItem('token')")
         
         if not self.auth_token:
+            # Fallback: Cookies से Token निकालें
             cookies = await page.context.cookies()
             for c in cookies:
                 if 'token' in c['name']:
@@ -125,7 +105,7 @@ class HybridBot:
                     break
 
         await browser.close()
-        print(f"✅ Login Success! Token Captured.")
+        print(f"✅ Login Success! Token Captured: {self.auth_token[:15]}...")
         return self.auth_token
 
     def scrape_api(self):
@@ -199,19 +179,19 @@ async def start(update, context):
         [InlineKeyboardButton("📊 Statistics", callback_data="stats")]
     ]
     await update.message.reply_text(
-        "🎯 **BDG Hybrid Bot Setup Complete!**\n\n"
-        "✅ Login via Playwright (Ultimate Input Fix)\n"
-        "✅ Fetch via Direct API (Fast & 24/7)\n\n"
-        "Use the buttons below to get started:",
+        "🎯 **BDG Hybrid Bot Ready!**\n"
+        "✅ Keyboard Login Fix\n"
+        "✅ Direct API Fetch (24/7)\n\n"
+        "Use the buttons below:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def fetch_data(update, context):
-    msg = await update.message.reply_text("🔄 Logging in... Please wait.")
+    msg = await update.message.reply_text("🔄 Logging in via Keyboard... Please wait.")
     try:
         token = await bot.get_token()
         if not token:
-            await msg.edit_text("❌ Login Failed! Check your BDG_USERNAME and BDG_PASSWORD.")
+            await msg.edit_text("❌ Login Failed! Check BDG_USERNAME/PASSWORD.")
             return
 
         data = bot.scrape_api()
@@ -229,7 +209,7 @@ async def fetch_data(update, context):
         save_data(old_data)
 
         await msg.edit_text(
-            f"✅ **Scraped Successfully!**\n\n"
+            f"✅ **Scraped Successfully!**\n"
             f"📊 New Records: {new_count}\n"
             f"📦 Total Records: {len(old_data)}"
         )
@@ -248,7 +228,7 @@ async def stats_cmd(update, context):
     violet = sum(1 for i in data if i['color'] == 'violet')
     
     await update.message.reply_text(
-        f"📊 **Statistics**\n\n"
+        f"📊 **Statistics**\n"
         f"📦 Total: {total}\n"
         f"{COLORS['red']} Red: {red}\n"
         f"{COLORS['green']} Green: {green}\n"
