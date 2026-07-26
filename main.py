@@ -1,6 +1,6 @@
 # ============================================
-# 📁 FILE: main.py (FINAL VERSION - 100% WORKING)
-# 📝 DESCRIPTION: Fixed Login, NoneType Error, & 24/7 API Fetch
+# 📁 FILE: main.py (FINAL VERSION - TOKEN FIXED)
+# 📝 DESCRIPTION: Fixed Login, Token Extraction (Session Storage), & 24/7 API Fetch
 # ============================================
 
 import os
@@ -58,7 +58,7 @@ class HybridBot:
         print("🌐 Going to login page...")
         await page.goto("https://bdg1.cc/?pwa=1", wait_until="networkidle")
         
-        # पेज लोड होने के लिए थोड़ा और इंतज़ार (12 सेकंड)
+        # पेज लोड होने के लिए इंतज़ार (12 सेकंड)
         await page.wait_for_timeout(12000)
 
         # ==========================================================
@@ -66,7 +66,6 @@ class HybridBot:
         # ==========================================================
         print("🔍 Clicking on the page to activate keyboard...")
         
-        # Try clicking on the page body to focus
         try:
             await page.click("body")
         except:
@@ -77,7 +76,6 @@ class HybridBot:
         await page.keyboard.type(USERNAME)
         await page.wait_for_timeout(1000)
 
-        # Tab दबाकर पासवर्ड बॉक्स पर जाएं
         await page.keyboard.press("Tab")
         await page.wait_for_timeout(1000)
 
@@ -85,19 +83,26 @@ class HybridBot:
         await page.keyboard.type(PASSWORD)
         await page.wait_for_timeout(1000)
 
-        # Enter दबाकर लॉगिन करें
         print("🖱️ Pressing Enter to Login...")
         await page.keyboard.press("Enter")
         
-        # डैशबोर्ड लोड होने का इंतज़ार
         print("⏳ Waiting for Dashboard to load...")
         await page.wait_for_timeout(12000)
 
-        # Extract Token from Local Storage
+        # ==========================================================
+        # 🔥 ULTIMATE TOKEN EXTRACTION (3 WAYS)
+        # ==========================================================
         print("🔑 Extracting Token...")
+        
+        # Method 1: Local Storage (Old method)
         self.auth_token = await page.evaluate("localStorage.getItem('token')")
         
         if not self.auth_token:
+            # Method 2: Session Storage (New method used by BDG now)
+            self.auth_token = await page.evaluate("sessionStorage.getItem('token')")
+        
+        if not self.auth_token:
+            # Method 3: Cookies
             cookies = await page.context.cookies()
             for c in cookies:
                 if 'token' in c['name']:
@@ -190,8 +195,8 @@ async def start(update, context):
     ]
     await update.message.reply_text(
         "🎯 **BDG Hybrid Bot Ready!**\n"
-        "✅ Keyboard Login Fix (15s Wait)\n"
-        "✅ Fixed NoneType Error\n"
+        "✅ Keyboard Login Fix\n"
+        "✅ Session Storage Token Fix\n"
         "✅ Direct API Fetch (24/7)\n\n"
         "Use the buttons below:",
         reply_markup=InlineKeyboardMarkup(keyboard)
