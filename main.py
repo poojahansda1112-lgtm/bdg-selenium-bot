@@ -1,6 +1,6 @@
 # ============================================
-# 📁 FILE: main.py (DIRECT API LOGIN - FINAL FIX)
-# 📝 DESCRIPTION: Pure Requests API Login (No Playwright)
+# 📁 FILE: main.py (ULTIMATE COOKIE HIJACK - FINAL MASTER)
+# 📝 DESCRIPTION: Playwright Login + Cookie Hijack + API Fetch
 # ============================================
 
 import os
@@ -11,10 +11,7 @@ import requests
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
-
-# ============================================
-# LOGGING & DATA SETUP
-# ============================================
+from playwright.async_api import async_playwright
 
 logging.basicConfig(level=logging.INFO)
 DATA_FILE = "bdg_data.json"
@@ -32,81 +29,81 @@ def save_data(data):
 COLORS = {"red": "🔴", "green": "🟢", "violet": "🟣"}
 
 # ============================================
-# DIRECT API BOT CLASS (No Playwright)
+# ULTIMATE COOKIE HIJACK BOT
 # ============================================
 
-class APIBot:
+class CookieHijackBot:
     def __init__(self):
-        self.auth_token = None
-        self.session = requests.Session()
+        self.cookie_string = None
 
-    def login(self):
-        print("🌐 Direct API Login Starting...")
+    async def login_and_get_cookies(self):
+        print("🌐 Playwright Starting (Cookie Hijack Mode)...")
+        p = await async_playwright().start()
+        browser = await p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-dev-shm-usage']
+        )
+        context = await browser.new_context()
+        page = await context.new_page()
+
         USERNAME = os.environ.get("BDG_USERNAME")
         PASSWORD = os.environ.get("BDG_PASSWORD")
         if not USERNAME or not PASSWORD:
+            await browser.close()
             raise Exception("❌ BDG Credentials missing!")
 
-        # BDG Game ka Login API URL
-        login_url = "https://api.bdg1.cc/api/login"
-        
-        payload = {
-            "username": USERNAME,
-            "password": PASSWORD
-        }
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Content-Type": "application/json",
-            "Origin": "https://bdg1.cc",
-            "Referer": "https://bdg1.cc/"
-        }
+        print("🌐 Going to login page...")
+        await page.goto("https://bdg1.cc/?pwa=1", wait_until="networkidle")
+        await page.wait_for_timeout(8000)
 
-        try:
-            print("📡 Sending Login Request...")
-            response = self.session.post(login_url, json=payload, headers=headers)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Token ka naya format check karein
-                if 'token' in data:
-                    self.auth_token = data['token']
-                elif 'data' in data and 'token' in data['data']:
-                    self.auth_token = data['data']['token']
-                elif 'access_token' in data:
-                    self.auth_token = data['access_token']
-                else:
-                    # Aakhri koshish: Agar JSON format ulat-put hai
-                    self.auth_token = data.get('auth_token') or data.get('token_key')
+        # ---------------- Keyboard Login ----------------
+        print("⌨️ Activating Keyboard...")
+        await page.click("body")
+        await page.wait_for_timeout(1000)
 
-                if self.auth_token:
-                    print(f"✅ Direct API Login Success! Token Captured.")
-                    return self.auth_token
-                else:
-                    raise Exception("Token not found in JSON response.")
-            else:
-                print(f"❌ Login Failed. Status: {response.status_code}")
-                print(response.text)
-                return None
-        except Exception as e:
-            print(f"❌ API Login Error: {e}")
-            return None
+        print("⌨️ Typing Username...")
+        await page.keyboard.type(USERNAME)
+        await page.wait_for_timeout(1000)
+        await page.keyboard.press("Tab")
+        await page.wait_for_timeout(1000)
+
+        print("⌨️ Typing Password...")
+        await page.keyboard.type(PASSWORD)
+        await page.wait_for_timeout(1000)
+
+        print("⏳ Pressing Enter...")
+        await page.keyboard.press("Enter")
+        await page.wait_for_timeout(10000)
+
+        # ---------------- COOKIE HIJACK ----------------
+        print("🍪 Hijacking Cookies from Browser...")
+        cookies = await context.cookies()
+        await browser.close()
+
+        if not cookies:
+            raise Exception("❌ No cookies found after login!")
+
+        # Convert cookies to a string format for API requests
+        cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
+        self.cookie_string = cookie_str
+        
+        print(f"✅ Cookie Hijack Success! {len(cookies)} cookies captured.")
+        return self.cookie_string
 
     def scrape_api(self):
-        if not self.auth_token:
+        if not self.cookie_string:
             return None
 
         url = "https://api.bdg1.cc/api/lottery/result/list?gameCode=WinGo_1M&page=1&pageSize=30"
         
         headers = {
-            "Authorization": f"Bearer {self.auth_token}",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Content-Type": "application/json"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Content-Type": "application/json",
+            "Cookie": self.cookie_string
         }
 
         try:
-            res = self.session.get(url, headers=headers)
+            res = requests.get(url, headers=headers)
             if res.status_code == 200:
                 data = res.json()
                 records = []
@@ -118,7 +115,7 @@ class APIBot:
                     records = data.get('list', [])
                 return self.parse_data(records)
             else:
-                print(f"❌ API Fetch Failed. Status: {res.status_code}")
+                print(f"❌ API Fetch Status: {res.status_code}")
                 return None
         except Exception as e:
             print(f"❌ API Error: {e}")
@@ -133,13 +130,11 @@ class APIBot:
             try:
                 period = str(item.get('issueNumber', item.get('issue', item.get('period', ''))))
                 number = int(item.get('number', item.get('num', 0)))
-                
                 raw_color = item.get('color', '').lower()
                 color = "unknown"
                 if "green" in raw_color: color = "green"
                 elif "red" in raw_color: color = "red"
                 elif "violet" in raw_color or "purple" in raw_color: color = "violet"
-
                 raw_size = item.get('size', '').lower()
                 size = "unknown"
                 if "big" in raw_size or "large" in raw_size: size = "big"
@@ -161,7 +156,7 @@ class APIBot:
 # GLOBAL INSTANCE & HANDLERS
 # ============================================
 
-bot = APIBot()
+bot = CookieHijackBot()
 
 async def start(update, context):
     keyboard = [
@@ -169,19 +164,19 @@ async def start(update, context):
         [InlineKeyboardButton("📊 Statistics", callback_data="stats")]
     ]
     await update.message.reply_text(
-        "🎯 **BDG Direct API Bot Ready!**\n"
-        "✅ Pure Requests Login (No Playwright)\n"
-        "✅ Fast & 100% Token Capture\n"
-        "✅ Direct API Fetch (24/7)",
+        "🎯 **BDG Cookie Hijack Bot Ready!**\n"
+        "✅ Login + Cookie Hijack\n"
+        "✅ Token-Free API Fetch\n"
+        "✅ 100% Working Final Fix",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def fetch_data(update, context):
-    msg = await update.message.reply_text("🔄 Logging in via Direct API... Please wait.")
+    msg = await update.message.reply_text("🔄 Logging in via Playwright to hijack cookies...")
     try:
-        token = bot.login()
-        if not token:
-            await msg.edit_text("❌ API Login Failed! Check Credentials or API URL.")
+        cookie_str = await bot.login_and_get_cookies()
+        if not cookie_str:
+            await msg.edit_text("❌ Login Failed! Check Credentials.")
             return
 
         data = bot.scrape_api()
@@ -199,7 +194,7 @@ async def fetch_data(update, context):
         save_data(old_data)
 
         await msg.edit_text(
-            f"✅ **Scraped via Direct API!**\n"
+            f"✅ **Final Success!**\n"
             f"📊 New Records: {new_count}\n"
             f"📦 Total Records: {len(old_data)}"
         )
@@ -247,14 +242,14 @@ async def main():
     app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CallbackQueryHandler(button_callback))
 
-    print("🚀 Direct API Bot running 24/7 on Railway...")
+    print("🚀 Cookie Hijack Bot running 24/7...")
 
     async def auto_loop():
         while True:
             try:
-                print("🔄 Auto-fetching via Direct API...")
-                token = bot.login()
-                if token:
+                print("🔄 Auto-fetching via Cookie Hijack...")
+                cookie_str = await bot.login_and_get_cookies()
+                if cookie_str:
                     data = bot.scrape_api()
                     if data:
                         old_data = load_data()
@@ -266,7 +261,7 @@ async def main():
                                 added += 1
                         if added > 0:
                             save_data(old_data)
-                            print(f"✅ Auto-fetch added {added} new records.")
+                            print(f"✅ Auto added {added} new records.")
             except Exception as e:
                 print(f"⚠️ Auto-fetch error: {e}")
             await asyncio.sleep(60)
@@ -290,4 +285,4 @@ if __name__ == "__main__":
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
-        pass
+        pass 
